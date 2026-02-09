@@ -69,3 +69,22 @@ CREATE POLICY "Public materials storage view" ON storage.objects FOR SELECT USIN
 CREATE POLICY "Public materials storage insert" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'materials');
 CREATE POLICY "Public materials storage update" ON storage.objects FOR UPDATE USING (bucket_id = 'materials');
 CREATE POLICY "Public materials storage delete" ON storage.objects FOR DELETE USING (bucket_id = 'materials');
+
+-- Create table for storing user custom templates
+CREATE TABLE IF NOT EXISTS prompt_templates (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  template_data JSONB NOT NULL, -- Stores the full state of the builder
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS for templates
+ALTER TABLE prompt_templates ENABLE ROW LEVEL SECURITY;
+
+-- Allow public access (for demo simplicity, or adjust as needed)
+CREATE POLICY "Public templates view" ON prompt_templates FOR SELECT USING (true);
+CREATE POLICY "Public templates insert" ON prompt_templates FOR INSERT WITH CHECK (true);
+CREATE POLICY "Public templates update" ON prompt_templates FOR UPDATE USING (true);
+CREATE POLICY "Public templates delete" ON prompt_templates FOR DELETE USING (true);

@@ -5,9 +5,9 @@ import {
     PenTool, PanelsTopLeft, User, Map, Sparkles, X, Plus,
     Globe, Fingerprint, Image as ImageIcon, Link, MousePointerClick,
     Zap, Share2, Box, FileText, Copy, CircleCheckBig, CircleAlert,
-    Smartphone, Monitor, Mail, Save
+    Smartphone, Monitor, Mail, Save, LayoutTemplate, FolderOpen, Trash2
 } from 'lucide-react';
-import { Industry, Product, Audience, BaseOption, Channel, LayoutStyle, Competitor } from '../types';
+import { Industry, Product, Audience, BaseOption, Channel, LayoutStyle, Competitor, TemplateData, PromptTemplate } from '../types';
 
 // Helper for dynamic icons
 const IconMap: { [key: string]: any } = {
@@ -23,6 +23,13 @@ const Builder: React.FC = () => {
     const [generatedPrompt, setGeneratedPrompt] = useState("");
     const [isSaving, setIsSaving] = useState(false);
     const [isSaved, setIsSaved] = useState(false);
+
+    // Template Management State
+    const [templates, setTemplates] = useState<PromptTemplate[]>([]);
+    const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+    const [templateName, setTemplateName] = useState("");
+    const [isTemplateDropdownOpen, setIsTemplateDropdownOpen] = useState(false);
+    const templateDropdownRef = useRef<HTMLDivElement>(null);
 
     // Core Selections (Initialized with first item from data to avoid nulls)
     const [selectedRole, setSelectedRole] = useState<BaseOption>(data.roles[0]);
@@ -90,25 +97,179 @@ const Builder: React.FC = () => {
 
 
     // --- Effects ---
-    // Update custom pain point when industry changes
+    // Fetch Templates
+    useEffect(() => {
+        const fetchTemplates = async () => {
+            const { data: tpls, error } = await supabase
+                .from('prompt_templates')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (!error && tpls) setTemplates(tpls as PromptTemplate[]);
+        };
+        fetchTemplates();
+    }, []);
+
+    // Load initial defaults if state is empty/undefined (safety check)
+    useEffect(() => {
+        if (!selectedRole && data.roles.length > 0) setSelectedRole(data.roles[0]);
+        if (!selectedProduct && data.products.length > 0) setSelectedProduct(data.products[0]);
+        // ... (Repeat for others if needed, but useState initializers handle most)
+    }, [data]);
+
+    // Update custom pain point when industry changes (Only if user hasn't manually edited it? Or always?
+    // Current logic: Always update. To improve: maybe check if it was manually changed. 
+    // For now, keep simple behavior: industry change -> suggest pain point.
     useEffect(() => {
         if (selectedIndustry && selectedIndustry.painPoints) {
             setCustomPainPoint(selectedIndustry.painPoints);
         }
     }, [selectedIndustry]);
 
-    // Close dropdown on outside click
+    // Close dropdowns on outside click
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (competitorDropdownRef.current && !competitorDropdownRef.current.contains(event.target as Node)) {
                 setIsCompetitorDropdownOpen(false);
+            }
+            if (templateDropdownRef.current && !templateDropdownRef.current.contains(event.target as Node)) {
+                setIsTemplateDropdownOpen(false);
             }
         }
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // PROMPT GENERATION LOGIC
+    // --- Template Logic ---
+
+    const getCurrentState = (): TemplateData => ({
+        roleId: selectedRole?.id,
+        productId: selectedProduct?.id,
+        industryId: selectedIndustry?.id,
+        audienceId: selectedAudience?.id,
+        journeyStageId: selectedJourneyStage?.id,
+        customAudience,
+        customPainPoint,
+        customCoreValue,
+        customMarketValue,
+        customScenarios,
+        customProof,
+        competitorIds: selectedCompetitorIds,
+        manualCompetitor,
+        geoQuestion,
+        geoKeywords,
+        geoStructureId: geoStructure?.id,
+        brandId: selectedBrand?.id,
+        marketingHookId: selectedHook?.id,
+        styleId: selectedStyle?.id,
+        toneId: selectedTone?.id,
+        headlineStrategyId: selectedHeadlineStrategy?.id,
+        imagePromptsEnabled: showImagePrompts,
+        imageStyleId: selectedImageStyle?.id,
+        imageRatioId: selectedImageRatio?.id,
+        topImage,
+        middleImage,
+        bottomImage,
+        topImageLink,
+        middleImageLink,
+        bottomImageLink,
+        channelId: selectedPrimaryChannel?.id,
+        distChannelIds: selectedDistChannels,
+        ctaStrategyId: selectedCTA?.id,
+        ctaLink,
+        outputFormat,
+        layoutStyleId: layoutStyle?.id,
+        cmsOptionId: selectedCMS?.id,
+        wordCountId: wordCount?.id,
+        languageId: selectedLanguage?.id
+    });
+
+    const loadTemplate = (tpl: TemplateData) => {
+        // Safe find helper
+        const find = (arr: any[], id: string, def: any) => arr.find(x => x.id === id) || def;
+
+        setSelectedRole(find(data.roles, tpl.roleId, data.roles[0]));
+        setSelectedProduct(find(data.products, tpl.productId, data.products[0]));
+        setSelectedIndustry(find(data.industries, tpl.industryId, data.industries[0]));
+        setSelectedAudience(find(data.audiences, tpl.audienceId, data.audiences[0]));
+        setSelectedJourneyStage(find(data.journeyStages, tpl.journeyStageId, data.journeyStages[0]));
+
+        setCustomAudience(tpl.customAudience || "");
+        setCustomPainPoint(tpl.customPainPoint || "");
+        setCustomCoreValue(tpl.customCoreValue || "");
+        setCustomMarketValue(tpl.customMarketValue || "");
+        setCustomScenarios(tpl.customScenarios || "");
+        setCustomProof(tpl.customProof || "");
+
+        setSelectedCompetitorIds(tpl.competitorIds || []);
+        setManualCompetitor(tpl.manualCompetitor || "");
+
+        setGeoQuestion(tpl.geoQuestion || "");
+        setGeoKeywords(tpl.geoKeywords || "");
+        setGeoStructure(find(data.geoStructures, tpl.geoStructureId, data.geoStructures[0]));
+
+        setSelectedBrand(find(data.brands, tpl.brandId, data.brands[0]));
+        setSelectedHook(find(data.marketingHooks, tpl.marketingHookId, data.marketingHooks[0]));
+        setSelectedStyle(find(data.styles, tpl.styleId, data.styles[0]));
+        setSelectedTone(find(data.tones, tpl.toneId, data.tones[0]));
+        setSelectedHeadlineStrategy(find(data.headlineStrategies, tpl.headlineStrategyId, data.headlineStrategies[0]));
+
+        setShowImagePrompts(tpl.imagePromptsEnabled);
+        setSelectedImageStyle(find(data.imageStyles, tpl.imageStyleId, data.imageStyles[0]));
+        setSelectedImageRatio(find(data.imageRatios, tpl.imageRatioId, data.imageRatios[0]));
+        setTopImage(tpl.topImage || "");
+        setMiddleImage(tpl.middleImage || "");
+        setBottomImage(tpl.bottomImage || "");
+        setTopImageLink(tpl.topImageLink || "");
+        setMiddleImageLink(tpl.middleImageLink || "");
+        setBottomImageLink(tpl.bottomImageLink || "");
+
+        setSelectedPrimaryChannel(find(data.channels, tpl.channelId, data.channels[0]));
+        setSelectedDistChannels(tpl.distChannelIds || []);
+        setSelectedCTA(find(data.ctaStrategies, tpl.ctaStrategyId, data.ctaStrategies[0]));
+        setCtaLink(tpl.ctaLink || "");
+
+        setOutputFormat(tpl.outputFormat || "markdown");
+        setLayoutStyle(find(data.layoutStyles, tpl.layoutStyleId, data.layoutStyles[0]));
+        setSelectedCMS(find(data.cmsOptions, tpl.cmsOptionId, data.cmsOptions[0]));
+        setWordCount(find(data.wordCounts, tpl.wordCountId, data.wordCounts[0]));
+        setSelectedLanguage(find(data.languages, tpl.languageId, data.languages[0]));
+    };
+
+    const handleSaveTemplate = async () => {
+        if (!templateName.trim()) return alert("请输入模版名称");
+
+        const currentState = getCurrentState();
+        try {
+            const { data: newTpl, error } = await supabase.from('prompt_templates').insert({
+                name: templateName,
+                template_data: currentState
+            }).select().single();
+
+            if (error) throw error;
+
+            setTemplates(prev => [newTpl as PromptTemplate, ...prev]);
+            setIsTemplateModalOpen(false);
+            setTemplateName("");
+            alert("模版保存成功！");
+        } catch (err: any) {
+            console.error("Failed to save template", err);
+            alert("保存失败: " + err.message);
+        }
+    };
+
+    const handleDeleteTemplate = async (id: string) => {
+        if (!window.confirm("确定要删除这个模版吗？")) return;
+        try {
+            const { error } = await supabase.from('prompt_templates').delete().eq('id', id);
+            if (error) throw error;
+            setTemplates(prev => prev.filter(t => t.id !== id));
+        } catch (err: any) {
+            alert("删除失败: " + err.message);
+        }
+    };
+
+
+    // PROMPT GENERATION LOGIC (Refactored to check nulls)
     useEffect(() => {
         if (!selectedRole || !selectedProduct) return;
 
@@ -132,8 +293,10 @@ const Builder: React.FC = () => {
             // 2. Output & Format Logic
             let outputFormatInstruction = "";
             const safeLink = ctaLink?.trim() || "https://example.com";
-            const ctaButtonHtml = `<div style="text-align: center; margin: 40px 0;"><a href="${safeLink}" style="background-color: #E2231A; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: bold;">${selectedCTA.name.split(" (")[0]} →</a></div>`;
-            const ctaButtonMd = `> **👉 [${selectedCTA.name.split(" (")[0]}](${safeLink})**`;
+            // Check selectedCTA before accessing props
+            const ctaName = selectedCTA?.name || "CTA";
+            const ctaButtonHtml = `<div style="text-align: center; margin: 40px 0;"><a href="${safeLink}" style="background-color: #E2231A; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: bold;">${ctaName.split(" (")[0]} →</a></div>`;
+            const ctaButtonMd = `> **👉 [${ctaName.split(" (")[0]}](${safeLink})**`;
 
             // Image Injection Logic
             let imgInstructions: string[] = [];
@@ -154,11 +317,11 @@ const Builder: React.FC = () => {
             const contentImageInstruction = imgInstructions.length > 0 ? `\n**Image Injection**:\n${imgInstructions.join("\n")}` : "";
 
             if (outputFormat === "html") {
-                outputFormatInstruction = `5. **输出形式 (HTML精排 - ${selectedPrimaryChannel.name})**：
+                outputFormatInstruction = `5. **输出形式 (HTML精排 - ${selectedPrimaryChannel?.name})**：
    - 输出完整的 HTML 代码，包裹在Markdown代码块中。
    - **排版卫士**：确保 max-width: 100%，字体适配移动端。
-   - **设计系统**：${layoutStyle.css}
-   - **CMS兼容**：${selectedCMS.desc}
+   - **设计系统**：${layoutStyle?.css}
+   - **CMS兼容**：${selectedCMS?.desc}
    ${contentImageInstruction}
    - **转化组件**：插入此 CTA 代码：\`${ctaButtonHtml}\``;
             } else {
@@ -172,13 +335,13 @@ const Builder: React.FC = () => {
             // 3. GEO & Multimodal
             const geoInstruction = (geoQuestion || geoKeywords || enableCodeGeo) ? `# GEO Optimization (AI 引用优化)
    - *用户提问*：>"${geoQuestion || "行业常见问题"}"
-   - *策略*：使用 ${geoStructure.name} 形式回答。
+   - *策略*：使用 ${geoStructure?.name} 形式回答。
    - *关键词*：${geoKeywords || "产品核心词"}
    ${enableCodeGeo ? "- **Technical SEO**: 包含 Schema.org JSON-LD 结构化数据。" : ""}` : "";
 
             const imageGenInstruction = showImagePrompts ? `# Image Generation Prompts
-   - **风格**：${selectedImageStyle.name}
-   - **比例**：${selectedImageRatio.name}
+   - **风格**：${selectedImageStyle?.name}
+   - **比例**：${selectedImageRatio?.name}
    - 生成3组英文 Prompt (Midjourney)。` : "";
 
             const multimodalInstruction = selectedMultimodal.length > 0 ? `# Multimodal Placeholders
@@ -197,23 +360,24 @@ const Builder: React.FC = () => {
             }).join('\n')}` : "";
 
             // FINAL PROMPT ASSEMBLY
+            // Use optional chaining generously to prevent crashes during state switches
             const prompt = `# Role
-你是一位 **${selectedRole.name}** (${selectedRole.desc})。
-**品牌调性**：${selectedBrand.name} (${selectedBrand.desc})。
+你是一位 **${selectedRole?.name}** (${selectedRole?.desc})。
+**品牌调性**：${selectedBrand?.name} (${selectedBrand?.desc})。
 
 # Task
-撰写一篇 **${selectedStyle.name}**，发布于 **${selectedPrimaryChannel.name}**。
+撰写一篇 **${selectedStyle?.name}**，发布于 **${selectedPrimaryChannel?.name}**。
 
 # Context
-1. **产品**：${selectedProduct.name} (${selectedProduct.features})
-2. **行业**：${selectedIndustry.name} (痛点: ${customPainPoint})
-3. **受众**：${customAudience ? customAudience : `${selectedAudience.name} (${selectedAudience.focus})`}
-4. **篇幅**：${wordCount.name}
-5. **语言**：${selectedLanguage.name}
+1. **产品**：${selectedProduct?.name} (${selectedProduct?.features})
+2. **行业**：${selectedIndustry?.name} (痛点: ${customPainPoint})
+3. **受众**：${customAudience ? customAudience : `${selectedAudience?.name} (${selectedAudience?.focus})`}
+4. **篇幅**：${wordCount?.name}
+5. **语言**：${selectedLanguage?.name}
 ${authorName ? `- **作者**：${authorName}` : ""}
 
 # Journey Stage
-**${selectedJourneyStage.name}** (${selectedJourneyStage.desc})
+**${selectedJourneyStage?.name}** (${selectedJourneyStage?.desc})
 
 # Strategy (PMM)
 1. **核心痛点**：${customPainPoint}
@@ -225,19 +389,19 @@ ${authorName ? `- **作者**：${authorName}` : ""}
    ${edgeText}
 
 # Conversion
-**策略**：${selectedCTA.name}
+**策略**：${selectedCTA?.name}
 **链接**：${safeLink}
-**开篇Hook**：${selectedHook.name} (${selectedHook.desc})
+**开篇Hook**：${selectedHook?.name} (${selectedHook?.desc})
 
 ${geoInstruction}
 
 # Tone
-${selectedTone.name} (${selectedTone.desc})
+${selectedTone?.name} (${selectedTone?.desc})
 
 # Output Requirements
-1. **标题**：5个基于 [${selectedHeadlineStrategy.name}] 的标题。
+1. **标题**：5个基于 [${selectedHeadlineStrategy?.name}] 的标题。
 2. **摘要**：SEO Meta Description.
-3. **正文**：逻辑清晰，${selectedStyle.id === "wechat" ? "短句+Emoji" : "专业严谨"}。
+3. **正文**：逻辑清晰，${selectedStyle?.id === "wechat" ? "短句+Emoji" : "专业严谨"}。
 ${outputFormatInstruction}
 
 ${multimodalInstruction}
@@ -261,7 +425,6 @@ ${imageGenInstruction}`;
     ]);
 
 
-    // ... (previous handleCopy logic)
     const handleCopy = async () => {
         try {
             await navigator.clipboard.writeText(generatedPrompt);
@@ -277,11 +440,11 @@ ${imageGenInstruction}`;
         setIsSaving(true);
         try {
             const settingsSnapshot = {
-                role: selectedRole.name,
-                product: selectedProduct.name,
-                industry: selectedIndustry.name,
-                format: selectedStyle.name,
-                channel: selectedPrimaryChannel.name
+                role: selectedRole?.name,
+                product: selectedProduct?.name,
+                industry: selectedIndustry?.name,
+                format: selectedStyle?.name,
+                channel: selectedPrimaryChannel?.name
             };
 
             const { error } = await supabase.from('generated_prompts').insert({
@@ -326,9 +489,45 @@ ${imageGenInstruction}`;
         <div className="h-full flex flex-col md:flex-row font-sans text-slate-800 overflow-hidden">
             {/* Left Column: Controls */}
             <div className="w-full md:w-5/12 bg-white border-r border-slate-200 flex flex-col h-full shadow-xl z-10">
-                <div className="p-5 border-b border-slate-100 bg-white z-20">
-                    <h1 className="text-lg font-bold text-slate-900 tracking-tight">内容营销智能生成助手</h1>
-                    <p className="text-xs text-slate-500 font-medium">配置参数以生成高质量 Prompt</p>
+                <div className="p-4 border-b border-slate-100 bg-white z-20 flex justify-between items-center">
+                    <div>
+                        <h1 className="text-lg font-bold text-slate-900 tracking-tight">内容营销智能生成助手</h1>
+                        <p className="text-xs text-slate-500 font-medium">配置参数以生成高质量 Prompt</p>
+                    </div>
+                    {/* Template Controls */}
+                    <div className="relative" ref={templateDropdownRef}>
+                        <button
+                            onClick={() => setIsTemplateDropdownOpen(!isTemplateDropdownOpen)}
+                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center transition-colors"
+                        >
+                            <LayoutTemplate className="w-3 h-3 mr-1.5" /> 模版
+                        </button>
+                        {isTemplateDropdownOpen && (
+                            <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 z-[100] animate-in fade-in zoom-in-95 duration-100">
+                                <div className="p-1">
+                                    <button
+                                        onClick={() => { setIsTemplateModalOpen(true); setIsTemplateDropdownOpen(false); }}
+                                        className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 rounded-lg flex items-center"
+                                    >
+                                        <Save className="w-3 h-3 mr-2 text-indigo-500" /> 保存当前模版
+                                    </button>
+                                    <div className="my-1 border-t border-slate-100" />
+                                    <div className="max-h-48 overflow-y-auto">
+                                        {templates.length === 0 && <div className="px-3 py-2 text-xs text-slate-400 text-center">暂无模版</div>}
+                                        {templates.map(t => (
+                                            <div key={t.id} className="group flex items-center justify-between px-3 py-2 hover:bg-slate-50 rounded-lg cursor-pointer">
+                                                <span className="text-xs text-slate-600 truncate flex-1" onClick={() => { loadTemplate(t.template_data); setIsTemplateDropdownOpen(false); }}>{t.name}</span>
+                                                <Trash2
+                                                    className="w-3 h-3 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteTemplate(t.id); }}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <div className="flex border-b border-slate-200 bg-slate-50">
@@ -356,13 +555,13 @@ ${imageGenInstruction}`;
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-[10px] font-semibold text-slate-500 mb-1">语言</label>
-                                        <select className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm" value={selectedLanguage.id} onChange={e => setSelectedLanguage(data.languages.find(l => l.id === e.target.value) || data.languages[0])}>
+                                        <select className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm" value={selectedLanguage?.id} onChange={e => setSelectedLanguage(data.languages.find(l => l.id === e.target.value) || data.languages[0])}>
                                             {data.languages.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                                         </select>
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-semibold text-slate-500 mb-1">产品</label>
-                                        <select className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm text-red-700 font-medium" value={selectedProduct.id} onChange={e => setSelectedProduct(data.products.find(p => p.id === e.target.value) as Product || data.products[0])}>
+                                        <select className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm text-red-700 font-medium" value={selectedProduct?.id} onChange={e => setSelectedProduct(data.products.find(p => p.id === e.target.value) as Product || data.products[0])}>
                                             {data.products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                                         </select>
                                     </div>
@@ -370,13 +569,13 @@ ${imageGenInstruction}`;
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-[10px] font-semibold text-slate-500 mb-1">行业</label>
-                                        <select className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm" value={selectedIndustry.id} onChange={e => setSelectedIndustry(data.industries.find(i => i.id === e.target.value) as Industry || data.industries[0])}>
+                                        <select className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm" value={selectedIndustry?.id} onChange={e => setSelectedIndustry(data.industries.find(i => i.id === e.target.value) as Industry || data.industries[0])}>
                                             {data.industries.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                                         </select>
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-semibold text-slate-500 mb-1">受众</label>
-                                        <select className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm" value={selectedAudience.id} onChange={e => setSelectedAudience(data.audiences.find(a => a.id === e.target.value) as Audience || data.audiences[0])}>
+                                        <select className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm" value={selectedAudience?.id} onChange={e => setSelectedAudience(data.audiences.find(a => a.id === e.target.value) as Audience || data.audiences[0])}>
                                             {data.audiences.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                                         </select>
                                     </div>
@@ -387,10 +586,10 @@ ${imageGenInstruction}`;
                             {/* Journey Stage */}
                             <div className="bg-gradient-to-r from-indigo-50 to-blue-50 p-4 rounded-xl border border-indigo-100">
                                 <div className="flex items-center space-x-2 mb-2"><Map className="w-4 h-4 text-indigo-500" /><h3 className="text-xs font-bold uppercase text-indigo-600">用户旅程阶段</h3></div>
-                                <select className="w-full p-2.5 bg-white border border-indigo-200 rounded-lg text-sm text-indigo-900" value={selectedJourneyStage.id} onChange={e => setSelectedJourneyStage(data.journeyStages.find(j => j.id === e.target.value) || data.journeyStages[0])}>
+                                <select className="w-full p-2.5 bg-white border border-indigo-200 rounded-lg text-sm text-indigo-900" value={selectedJourneyStage?.id} onChange={e => setSelectedJourneyStage(data.journeyStages.find(j => j.id === e.target.value) || data.journeyStages[0])}>
                                     {data.journeyStages.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
                                 </select>
-                                <p className="text-[10px] text-indigo-500 mt-1 pl-1">{selectedJourneyStage.desc}</p>
+                                <p className="text-[10px] text-indigo-500 mt-1 pl-1">{selectedJourneyStage?.desc}</p>
                             </div>
 
                             {/* Value Prop */}
@@ -440,7 +639,7 @@ ${imageGenInstruction}`;
                                 <div><label className="block text-[10px] font-semibold text-blue-700/70 mb-1">核心问题</label><input className="w-full p-2.5 text-xs border border-blue-200 rounded-lg bg-white" placeholder="e.g. 行业常见问题?" value={geoQuestion} onChange={e => setGeoQuestion(e.target.value)} /></div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div><label className="block text-[10px] font-semibold text-blue-700/70 mb-1">关键词</label><input className="w-full p-2.5 text-xs border border-blue-200 rounded-lg bg-white" value={geoKeywords} onChange={e => setGeoKeywords(e.target.value)} /></div>
-                                    <div><label className="block text-[10px] font-semibold text-blue-700/70 mb-1">结构</label><select className="w-full p-2.5 text-xs border border-blue-200 rounded-lg bg-white" value={geoStructure.id} onChange={e => setGeoStructure(data.geoStructures.find(s => s.id === e.target.value) || data.geoStructures[0])}>{data.geoStructures.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+                                    <div><label className="block text-[10px] font-semibold text-blue-700/70 mb-1">结构</label><select className="w-full p-2.5 text-xs border border-blue-200 rounded-lg bg-white" value={geoStructure?.id} onChange={e => setGeoStructure(data.geoStructures.find(s => s.id === e.target.value) || data.geoStructures[0])}>{data.geoStructures.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
                                 </div>
                             </div>
                         </div>
@@ -451,13 +650,13 @@ ${imageGenInstruction}`;
                             {/* Brand & Style */}
                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
                                 <div className="flex items-center space-x-2 mb-1"><Fingerprint className="w-4 h-4 text-slate-500" /><h3 className="text-xs font-bold uppercase text-slate-500">品牌与调性</h3></div>
-                                <div><label className="block text-[10px] font-semibold text-slate-400 mb-1">品牌调性</label><select className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" value={selectedBrand.id} onChange={e => setSelectedBrand(data.brands.find(b => b.id === e.target.value) || data.brands[0])}>{data.brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
-                                <div><label className="block text-[10px] font-semibold text-slate-400 mb-1">心理钩子</label><select className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" value={selectedHook.id} onChange={e => setSelectedHook(data.marketingHooks.find(h => h.id === e.target.value) || data.marketingHooks[0])}>{data.marketingHooks.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}</select></div>
+                                <div><label className="block text-[10px] font-semibold text-slate-400 mb-1">品牌调性</label><select className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" value={selectedBrand?.id} onChange={e => setSelectedBrand(data.brands.find(b => b.id === e.target.value) || data.brands[0])}>{data.brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
+                                <div><label className="block text-[10px] font-semibold text-slate-400 mb-1">心理钩子</label><select className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" value={selectedHook?.id} onChange={e => setSelectedHook(data.marketingHooks.find(h => h.id === e.target.value) || data.marketingHooks[0])}>{data.marketingHooks.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}</select></div>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <div><label className="block text-[10px] font-semibold text-slate-400 mb-1">风格</label><select className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" value={selectedStyle.id} onChange={e => setSelectedStyle(data.styles.find(s => s.id === e.target.value) || data.styles[0])}>{data.styles.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-                                    <div><label className="block text-[10px] font-semibold text-slate-400 mb-1">语气</label><select className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" value={selectedTone.id} onChange={e => setSelectedTone(data.tones.find(t => t.id === e.target.value) || data.tones[0])}>{data.tones.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+                                    <div><label className="block text-[10px] font-semibold text-slate-400 mb-1">风格</label><select className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" value={selectedStyle?.id} onChange={e => setSelectedStyle(data.styles.find(s => s.id === e.target.value) || data.styles[0])}>{data.styles.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+                                    <div><label className="block text-[10px] font-semibold text-slate-400 mb-1">语气</label><select className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" value={selectedTone?.id} onChange={e => setSelectedTone(data.tones.find(t => t.id === e.target.value) || data.tones[0])}>{data.tones.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
                                 </div>
-                                <div><label className="block text-[10px] font-semibold text-slate-400 mb-1">标题策略</label><select className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" value={selectedHeadlineStrategy.id} onChange={e => setSelectedHeadlineStrategy(data.headlineStrategies.find(h => h.id === e.target.value) || data.headlineStrategies[0])}>{data.headlineStrategies.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}</select></div>
+                                <div><label className="block text-[10px] font-semibold text-slate-400 mb-1">标题策略</label><select className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" value={selectedHeadlineStrategy?.id} onChange={e => setSelectedHeadlineStrategy(data.headlineStrategies.find(h => h.id === e.target.value) || data.headlineStrategies[0])}>{data.headlineStrategies.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}</select></div>
                             </div>
 
                             {/* Images */}
@@ -472,8 +671,8 @@ ${imageGenInstruction}`;
                                     </div>
                                     <div><label className="block text-[10px] font-semibold text-purple-700/70 mb-1">作者</label><input className="w-full p-2 text-xs border border-purple-200 rounded-lg bg-white" placeholder="e.g. 资深顾问" value={authorName} onChange={e => setAuthorName(e.target.value)} /></div>
                                     {showImagePrompts && <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-purple-200/50">
-                                        <select className="p-1.5 bg-white border border-purple-200 rounded text-[10px]" value={selectedImageStyle.id} onChange={e => setSelectedImageStyle(data.imageStyles.find(s => s.id === e.target.value) || data.imageStyles[0])}>{data.imageStyles.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
-                                        <select className="p-1.5 bg-white border border-purple-200 rounded text-[10px]" value={selectedImageRatio.id} onChange={e => setSelectedImageRatio(data.imageRatios.find(r => r.id === e.target.value) || data.imageRatios[0])}>{data.imageRatios.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select>
+                                        <select className="p-1.5 bg-white border border-purple-200 rounded text-[10px]" value={selectedImageStyle?.id} onChange={e => setSelectedImageStyle(data.imageStyles.find(s => s.id === e.target.value) || data.imageStyles[0])}>{data.imageStyles.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+                                        <select className="p-1.5 bg-white border border-purple-200 rounded text-[10px]" value={selectedImageRatio?.id} onChange={e => setSelectedImageRatio(data.imageRatios.find(r => r.id === e.target.value) || data.imageRatios[0])}>{data.imageRatios.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select>
                                     </div>}
                                 </div>
                             </div>
@@ -481,7 +680,7 @@ ${imageGenInstruction}`;
                             {/* Conversion */}
                             <div className="bg-red-50/50 p-4 rounded-xl border border-red-100/80 shadow-sm space-y-4">
                                 <div className="flex items-center space-x-2 mb-1"><MousePointerClick className="w-4 h-4 text-red-500" /><h3 className="text-xs font-bold uppercase text-red-600">留资转化</h3></div>
-                                <div><label className="block text-[10px] font-semibold text-red-700/70 mb-1">CTA 策略</label><select className="w-full p-2.5 bg-white border border-red-200 rounded-lg text-sm" value={selectedCTA.id} onChange={e => setSelectedCTA(data.ctaStrategies.find(c => c.id === e.target.value) || data.ctaStrategies[0])}>{data.ctaStrategies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                                <div><label className="block text-[10px] font-semibold text-red-700/70 mb-1">CTA 策略</label><select className="w-full p-2.5 bg-white border border-red-200 rounded-lg text-sm" value={selectedCTA?.id} onChange={e => setSelectedCTA(data.ctaStrategies.find(c => c.id === e.target.value) || data.ctaStrategies[0])}>{data.ctaStrategies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                                 <div><label className="block text-[10px] font-semibold text-red-700/70 mb-1">目标链接</label><input className="w-full p-2.5 text-xs border border-red-200 rounded-lg bg-white" placeholder="https://..." value={ctaLink} onChange={e => setCtaLink(e.target.value)} /></div>
                             </div>
 
@@ -494,7 +693,7 @@ ${imageGenInstruction}`;
                                         {data.channels.map(c => {
                                             const Icon = IconMap[c.iconName] || FileText;
                                             return (
-                                                <div key={c.id} onClick={() => setSelectedPrimaryChannel(c)} className={`cursor-pointer px-3 py-2 rounded-lg text-xs border flex flex-col ${selectedPrimaryChannel.id === c.id ? "bg-red-50 border-red-300 text-red-800" : "bg-slate-50 border-slate-200 text-slate-600"}`}>
+                                                <div key={c.id} onClick={() => setSelectedPrimaryChannel(c)} className={`cursor-pointer px-3 py-2 rounded-lg text-xs border flex flex-col ${selectedPrimaryChannel?.id === c.id ? "bg-red-50 border-red-300 text-red-800" : "bg-slate-50 border-slate-200 text-slate-600"}`}>
                                                     <div className="flex items-center mb-1"><Icon className="w-3 h-3 mr-1.5" /><span className="font-medium">{c.name}</span></div>
                                                     <span className="text-[9px] opacity-70 truncate">{c.desc}</span>
                                                 </div>
@@ -516,8 +715,8 @@ ${imageGenInstruction}`;
                                 </div>
                                 {outputFormat === "html" && (
                                     <>
-                                        <div className="mb-3"><label className="block text-[10px] font-semibold text-blue-600 mb-1">CSS 模板</label><select className="w-full p-2 bg-blue-50 border border-blue-200 rounded-lg text-xs" value={layoutStyle.id} onChange={e => setLayoutStyle(data.layoutStyles.find(l => l.id === e.target.value) as LayoutStyle || data.layoutStyles[0])}>{data.layoutStyles.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
-                                        <div className="mb-3"><label className="block text-[10px] font-semibold text-orange-600 mb-1 flex items-center"><Box className="w-3 h-3 mr-1" /> CMS 兼容</label><select className="w-full p-2 bg-orange-50 border border-orange-200 rounded-lg text-xs" value={selectedCMS.id} onChange={e => setSelectedCMS(data.cmsOptions.find(c => c.id === e.target.value) || data.cmsOptions[0])}>{data.cmsOptions.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                                        <div className="mb-3"><label className="block text-[10px] font-semibold text-blue-600 mb-1">CSS 模板</label><select className="w-full p-2 bg-blue-50 border border-blue-200 rounded-lg text-xs" value={layoutStyle?.id} onChange={e => setLayoutStyle(data.layoutStyles.find(l => l.id === e.target.value) as LayoutStyle || data.layoutStyles[0])}>{data.layoutStyles.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
+                                        <div className="mb-3"><label className="block text-[10px] font-semibold text-orange-600 mb-1 flex items-center"><Box className="w-3 h-3 mr-1" /> CMS 兼容</label><select className="w-full p-2 bg-orange-50 border border-orange-200 rounded-lg text-xs" value={selectedCMS?.id} onChange={e => setSelectedCMS(data.cmsOptions.find(c => c.id === e.target.value) || data.cmsOptions[0])}>{data.cmsOptions.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                                     </>
                                 )}
                             </div>
@@ -557,6 +756,31 @@ ${imageGenInstruction}`;
                     </div>
                 </div>
             </div>
+
+            {/* Template Modal */}
+            {isTemplateModalOpen && (
+                <div className="fixed inset-0 bg-black/50 z-[101] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 animate-in zoom-in-95">
+                        <h3 className="text-lg font-bold mb-4">保存为新模版</h3>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 mb-1">模版名称</label>
+                                <input
+                                    className="w-full border p-2 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    placeholder="e.g. B2B LinkedIn 推广"
+                                    value={templateName}
+                                    onChange={e => setTemplateName(e.target.value)}
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="flex justify-end space-x-3 pt-2">
+                                <button onClick={() => setIsTemplateModalOpen(false)} className="px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
+                                <button onClick={handleSaveTemplate} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">保存</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

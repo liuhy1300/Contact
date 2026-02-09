@@ -39,33 +39,35 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setData(INITIAL_DATA);
       } else {
         // Reconstruct config from flat rows
-        const newConfig: PromptConfig = { ...INITIAL_DATA };
+        // Use deep copy of INITIAL_DATA to ensure we start with presets
+        const newConfig: PromptConfig = JSON.parse(JSON.stringify(INITIAL_DATA));
 
-        // Clear lists to avoid duplicates from initial data if we want strict DB source
-        // But for safety, let's just overwrite categories that exist in DB
-        (Object.keys(newConfig) as CategoryKey[]).forEach(key => {
-          newConfig[key] = [];
-        });
+        // We do NOT clear the lists anymore. Instead, we merge DB rows into them.
+        // This ensures un-edited presets remain visible, while DB items (new or edits) take precedence.
 
         rows.forEach((row: any) => {
           const category = row.category as CategoryKey;
           if (newConfig[category]) {
-            // Merge extra_data back into the object properties
             const item = {
               id: row.option_id,
               name: row.name,
               desc: row.description,
               ...row.extra_data
             };
-            newConfig[category].push(item);
+
+            // Check if this item exists in INITIAL_DATA (based on ID)
+            const existingIndex = newConfig[category].findIndex((p: any) => p.id === item.id);
+
+            if (existingIndex >= 0) {
+              // Update existing preset with DB data
+              newConfig[category][existingIndex] = item;
+            } else {
+              // It's a new item, append it
+              newConfig[category].push(item);
+            }
           }
         });
 
-        // If some categories are empty in DB (e.g. not seeded yet), fallback to initialData for those?
-        // No, let's trust DB. If DB misses data, it should be fixed in DB. 
-        // BUT for this demo, to prevent empty UI if user didn't run SQL, let's fast fail? 
-        // Actually, let's fallback to INITIAL_DATA if a category is completely empty?
-        // Better strategy: If TOTAL rows > 0, trust DB.
         setData(newConfig as PromptConfig);
       }
     } catch (err: any) {

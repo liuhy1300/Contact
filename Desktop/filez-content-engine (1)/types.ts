@@ -78,4 +78,55 @@ export interface MaterialItem {
   created_at: string;
 }
 
+
+export interface TemplateData {
+  roleId: string;
+  productId: string;
+  industryId: string;
+  audienceId: string;
+  journeyStageId: string;
+  customAudience: string;
+  customPainPoint: string;
+  customCoreValue: string;
+  customMarketValue: string;
+  customScenarios: string;
+  customProof: string;
+  competitorIds: string[];
+  manualCompetitor: string;
+  geoQuestion: string;
+  geoKeywords: string;
+  geoStructureId: string;
+  brandId: string;
+  marketingHookId: string;
+  styleId: string;
+  toneId: string;
+  headlineStrategyId: string;
+  imagePromptsEnabled: boolean;
+  imageStyleId: string;
+  imageRatioId: string;
+  topImage: string;
+  middleImage: string;
+  bottomImage: string;
+  topImageLink: string;
+  middleImageLink: string;
+  bottomImageLink: string;
+  channelId: string;
+  distChannelIds: string[];
+  ctaStrategyId: string;
+  ctaLink: string;
+  outputFormat: 'markdown' | 'html';
+  layoutStyleId: string;
+  cmsOptionId: string;
+  wordCountId: string;
+  languageId: string;
+}
+
+export interface PromptTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  template_data: TemplateData;
+  created_at: string;
+}
+
 export type CategoryKey = keyof PromptConfig;
