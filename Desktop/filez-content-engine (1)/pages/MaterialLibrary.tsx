@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     Image as ImageIcon, FileText, Link as LinkIcon, Plus, Trash2,
-    ExternalLink, Download, X, Upload, Loader2, MoreVertical
+    ExternalLink, Download, X, Upload, Loader2, MoreVertical, Copy
 } from 'lucide-react';
 import { MaterialItem } from '../types';
 import { materialService } from '../lib/materialService';
@@ -126,6 +126,15 @@ const MaterialLibrary: React.FC = () => {
         }
     };
 
+    const handleCopyLink = async (url: string) => {
+        try {
+            await navigator.clipboard.writeText(url);
+            alert('链接已复制到剪贴板');
+        } catch (err) {
+            console.error('Copy failed', err);
+        }
+    };
+
     const openAddModal = () => {
         if (activeTab === 'link') {
             setIsLinkModalOpen(true);
@@ -159,8 +168,8 @@ const MaterialLibrary: React.FC = () => {
                     <button
                         onClick={() => setActiveTab('image')}
                         className={`pb-4 px-1 flex items-center font-medium text-sm transition-colors border-b-2 ${activeTab === 'image'
-                                ? 'border-indigo-600 text-indigo-600'
-                                : 'border-transparent text-slate-500 hover:text-slate-700'
+                            ? 'border-indigo-600 text-indigo-600'
+                            : 'border-transparent text-slate-500 hover:text-slate-700'
                             }`}
                     >
                         <ImageIcon className="w-4 h-4 mr-2" />
@@ -169,8 +178,8 @@ const MaterialLibrary: React.FC = () => {
                     <button
                         onClick={() => setActiveTab('document')}
                         className={`pb-4 px-1 flex items-center font-medium text-sm transition-colors border-b-2 ${activeTab === 'document'
-                                ? 'border-indigo-600 text-indigo-600'
-                                : 'border-transparent text-slate-500 hover:text-slate-700'
+                            ? 'border-indigo-600 text-indigo-600'
+                            : 'border-transparent text-slate-500 hover:text-slate-700'
                             }`}
                     >
                         <FileText className="w-4 h-4 mr-2" />
@@ -179,8 +188,8 @@ const MaterialLibrary: React.FC = () => {
                     <button
                         onClick={() => setActiveTab('link')}
                         className={`pb-4 px-1 flex items-center font-medium text-sm transition-colors border-b-2 ${activeTab === 'link'
-                                ? 'border-indigo-600 text-indigo-600'
-                                : 'border-transparent text-slate-500 hover:text-slate-700'
+                            ? 'border-indigo-600 text-indigo-600'
+                            : 'border-transparent text-slate-500 hover:text-slate-700'
                             }`}
                     >
                         <LinkIcon className="w-4 h-4 mr-2" />
@@ -261,6 +270,15 @@ const MaterialLibrary: React.FC = () => {
                                         >
                                             {item.type === 'link' ? <ExternalLink className="w-4 h-4" /> : <Download className="w-4 h-4" />}
                                         </button>
+                                        {item.type === 'link' && (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleCopyLink(item.url); }}
+                                                className="p-2 bg-white/90 rounded-full text-slate-700 hover:text-green-600 hover:bg-white transition-colors"
+                                                title="复制链接"
+                                            >
+                                                <Copy className="w-4 h-4" />
+                                            </button>
+                                        )}
                                         <button
                                             onClick={(e) => { e.stopPropagation(); handleDelete(item.id, item.url, item.type, item.meta); }}
                                             className="p-2 bg-white/90 rounded-full text-slate-700 hover:text-red-600 hover:bg-white transition-colors"

@@ -119,6 +119,11 @@ export interface TemplateData {
   cmsOptionId: string;
   wordCountId: string;
   languageId: string;
+  knowledgeIds?: string[];
+  chkHeadlines?: boolean;
+  chkMeta?: boolean;
+  chkQuotes?: boolean;
+  chkHtmlOnly?: boolean;
 }
 
 export interface PromptTemplate {
@@ -126,6 +131,16 @@ export interface PromptTemplate {
   name: string;
   description?: string;
   template_data: TemplateData;
+  created_at: string;
+}
+
+
+export interface KnowledgeItem {
+  id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  ref_mode: 'smart' | 'strict';
   created_at: string;
 }
 

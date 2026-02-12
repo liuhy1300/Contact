@@ -1,21 +1,19 @@
 
-const GEMINI_API_KEY = (import.meta.env.VITE_GEMINI_API_KEY || '').trim();
-// Use the proxy path defined in vite.config.ts
-const GEMINI_API_URL = '/gemini-api/v1beta/models/gemini-2.0-flash:generateContent';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-interface GeminiResponse {
-    candidates: {
-        content: {
-            parts: {
-                text: string;
-            }[];
-        };
-    }[];
-}
+const GEMINI_API_KEY = (import.meta.env.VITE_GEMINI_API_KEY || '').trim();
+
+// Initialize the Google Generative AI client
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
+// Define the model
+const model = genAI.getGenerativeModel({
+    model: "gemini-2.0-flash"
+});
 
 export const GeminiService = {
     /**
-     * Generates content based on a prompt.
+     * Generates content based on a prompt using the Google Generative AI SDK.
      * @param prompt The user's input prompt.
      * @returns The generated text.
      */
@@ -26,34 +24,16 @@ export const GeminiService = {
         }
 
         try {
-            const response = await fetch(GEMINI_API_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-goog-api-key': GEMINI_API_KEY,
-                },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{ text: prompt }]
-                    }]
-                })
-            });
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
 
-            if (!response.ok) {
-                throw new Error(`Gemini API Error: ${response.statusText}`);
-            }
-
-            const data: GeminiResponse = await response.json();
-
-            if (data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
-                return data.candidates[0].content.parts[0].text;
-            } else {
-                throw new Error('Invalid response format from Gemini API');
-            }
+            return text;
 
         } catch (error) {
             console.error('Error generating content:', error);
-            return `Error generating content. Please try again. Details: ${error}`;
+            // Fallback error message
+            return `Error generating content. Please check your API key and network connection. Details: ${error instanceof Error ? error.message : String(error)}`;
         }
     },
 

@@ -88,3 +88,136 @@ CREATE POLICY "Public templates view" ON prompt_templates FOR SELECT USING (true
 CREATE POLICY "Public templates insert" ON prompt_templates FOR INSERT WITH CHECK (true);
 CREATE POLICY "Public templates update" ON prompt_templates FOR UPDATE USING (true);
 CREATE POLICY "Public templates delete" ON prompt_templates FOR DELETE USING (true);
+
+-- Create table for RAG Knowledge Base
+CREATE TABLE IF NOT EXISTS knowledge_base (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  tags TEXT[] DEFAULT '{}',
+  ref_mode TEXT DEFAULT 'smart' CHECK (ref_mode IN ('smart', 'strict')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS for knowledge_base
+ALTER TABLE knowledge_base ENABLE ROW LEVEL SECURITY;
+
+-- Allow public access for knowledge_base (adjust as needed)
+CREATE POLICY "Public knowledge view" ON knowledge_base FOR SELECT USING (true);
+CREATE POLICY "Public knowledge insert" ON knowledge_base FOR INSERT WITH CHECK (true);
+CREATE POLICY "Public knowledge update" ON knowledge_base FOR UPDATE USING (true);
+CREATE POLICY "Public knowledge delete" ON knowledge_base FOR DELETE USING (true);
+
+
+-- Create profiles table to store user roles
+CREATE TABLE IF NOT EXISTS profiles (
+  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+  email TEXT,
+  role TEXT DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS for profiles
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public profiles are viewable by everyone" ON profiles FOR SELECT USING (true);
+CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
+
+-- Function to handle new user signup automatically
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, role)
+  VALUES (new.id, new.email, 'user');
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger to create profile on signup
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- RPC Function to allow Admin to create users (Bypassing client-side restriction)
+-- NOTE: This requires pgcrypto extension
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE OR REPLACE FUNCTION create_user_by_admin(
+  email TEXT,
+  password TEXT,
+  user_name TEXT
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER -- Run as database owner
+AS $$
+DECLARE
+  new_user_id UUID;
+  encrypted_pw TEXT;
+BEGIN
+  -- 2. Generate ID and Hash Password
+  new_user_id := gen_random_uuid();
+  encrypted_pw := crypt(password, gen_salt('bf'));
+
+  -- 3. Insert into auth.users
+  INSERT INTO auth.users (
+    instance_id,
+    id,
+    aud,
+    role,
+    email,
+    encrypted_password,
+    email_confirmed_at,
+    recovery_sent_at,
+    last_sign_in_at,
+    raw_app_meta_data,
+    raw_user_meta_data,
+    created_at,
+    updated_at,
+    confirmation_token,
+    email_change,
+    email_change_token_new,
+    recovery_token
+  ) VALUES (
+    '00000000-0000-0000-0000-000000000000',
+    new_user_id,
+    'authenticated',
+    'authenticated',
+    email,
+    encrypted_pw,
+    now(),
+    now(),
+    now(),
+    '{"provider":"email","providers":["email"]}',
+    jsonb_build_object('name', user_name),
+    now(),
+    now(),
+    '',
+    '',
+    '',
+    ''
+  );
+
+  -- 4. Insert into auth.identities
+  INSERT INTO auth.identities (
+    id,
+    user_id,
+    identity_data,
+    provider,
+    last_sign_in_at,
+    created_at,
+    updated_at
+  ) VALUES (
+    gen_random_uuid(),
+    new_user_id,
+    jsonb_build_object('sub', new_user_id, 'email', email),
+    'email',
+    now(),
+    now(),
+    now()
+  );
+  
+  RETURN new_user_id;
+END;
+$$;

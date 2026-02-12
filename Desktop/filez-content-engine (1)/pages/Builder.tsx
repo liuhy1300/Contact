@@ -1,21 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useData } from '../context/DataContext';
 import {
     PenTool, PanelsTopLeft, User, Map, Sparkles, X, Plus,
     Globe, Fingerprint, Image as ImageIcon, Link, MousePointerClick,
     Zap, Share2, Box, FileText, Copy, CircleCheckBig, CircleAlert,
-    Smartphone, Monitor, Mail, Save, LayoutTemplate, FolderOpen, Trash2
+    Smartphone, Monitor, Mail, Save, LayoutTemplate, FolderOpen, Trash2, BookOpen
 } from 'lucide-react';
-import { Industry, Product, Audience, BaseOption, Channel, LayoutStyle, Competitor, TemplateData, PromptTemplate } from '../types';
+import { Industry, Product, Audience, BaseOption, Channel, LayoutStyle, Competitor, TemplateData, PromptTemplate, KnowledgeItem } from '../types';
 
 // Helper for dynamic icons
 const IconMap: { [key: string]: any } = {
     Smartphone, Monitor, Mail, FileText
 };
 
+const STORAGE_KEY = 'builder_state_v1';
+
 const Builder: React.FC = () => {
     const { data } = useData();
+    const navigate = useNavigate();
 
     // -- State Management --
     const [activeTab, setActiveTab] = useState<"strategy" | "visual">("strategy");
@@ -87,6 +91,7 @@ const Builder: React.FC = () => {
     const [ctaLink, setCtaLink] = useState("");
 
     // Output Configuration
+    // Output Configuration
     const [selectedPrimaryChannel, setSelectedPrimaryChannel] = useState<Channel>(data.channels[0]);
     const [selectedDistChannels, setSelectedDistChannels] = useState<string[]>([]);
     const [outputFormat, setOutputFormat] = useState<"markdown" | "html">("markdown");
@@ -94,6 +99,14 @@ const Builder: React.FC = () => {
     const [selectedCMS, setSelectedCMS] = useState<BaseOption>(data.cmsOptions[0]);
     const [wordCount, setWordCount] = useState<BaseOption>(data.wordCounts[0]);
     const [selectedLanguage, setSelectedLanguage] = useState<BaseOption>(data.languages[0]);
+
+    // Output Requirements State
+    const [chkHeadlines, setChkHeadlines] = useState(true);
+    const [chkMeta, setChkMeta] = useState(false);
+    const [chkQuotes, setChkQuotes] = useState(true);
+    const [chkHtmlOnly, setChkHtmlOnly] = useState(false);
+    const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeItem[]>([]);
+    const [selectedKnowledgeIds, setSelectedKnowledgeIds] = useState<string[]>([]);
 
 
     // --- Effects ---
@@ -107,6 +120,46 @@ const Builder: React.FC = () => {
             if (!error && tpls) setTemplates(tpls as PromptTemplate[]);
         };
         fetchTemplates();
+    }, []);
+
+    // -- Persistence --
+    useEffect(() => {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                loadTemplate(parsed); // Reuse loadTemplate to restore state
+            } catch (e) {
+                console.error("Failed to load persistence", e);
+            }
+        }
+    }, []);
+
+    // Save state on change (Debounced slightly by React batching, but good to optimize in real world)
+    useEffect(() => {
+        const stateToSave = getCurrentState();
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
+    }, [
+        selectedRole, selectedProduct, selectedIndustry, selectedAudience, selectedJourneyStage,
+        customAudience, customPainPoint, customCoreValue, customMarketValue, customScenarios, customProof,
+        selectedCompetitorIds, manualCompetitor, geoQuestion, geoKeywords, geoStructure,
+        selectedBrand, selectedHook, selectedStyle, selectedTone, selectedHeadlineStrategy,
+        showImagePrompts, topImage, middleImage, bottomImage, topImageLink, middleImageLink, bottomImageLink,
+        authorName, selectedMultimodal, videoLink, interactiveGoal, selectedImageStyle, selectedImageRatio,
+        selectedCTA, ctaLink, selectedPrimaryChannel, selectedDistChannels, outputFormat, layoutStyle, selectedCMS,
+        wordCount, selectedLanguage, selectedKnowledgeIds, chkHeadlines, chkMeta, chkQuotes, chkHtmlOnly
+    ]);
+
+    // Fetch Knowledge Base
+    useEffect(() => {
+        const fetchKnowledge = async () => {
+            const { data: kItems, error } = await supabase
+                .from('knowledge_base')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (!error && kItems) setKnowledgeItems(kItems as KnowledgeItem[]);
+        };
+        fetchKnowledge();
     }, []);
 
     // Load initial defaults if state is empty/undefined (safety check)
@@ -180,7 +233,12 @@ const Builder: React.FC = () => {
         layoutStyleId: layoutStyle?.id,
         cmsOptionId: selectedCMS?.id,
         wordCountId: wordCount?.id,
-        languageId: selectedLanguage?.id
+        languageId: selectedLanguage?.id,
+        knowledgeIds: selectedKnowledgeIds,
+        chkHeadlines,
+        chkMeta,
+        chkQuotes,
+        chkHtmlOnly
     });
 
     const loadTemplate = (tpl: TemplateData) => {
@@ -233,6 +291,13 @@ const Builder: React.FC = () => {
         setSelectedCMS(find(data.cmsOptions, tpl.cmsOptionId, data.cmsOptions[0]));
         setWordCount(find(data.wordCounts, tpl.wordCountId, data.wordCounts[0]));
         setSelectedLanguage(find(data.languages, tpl.languageId, data.languages[0]));
+
+        setSelectedKnowledgeIds(tpl.knowledgeIds || []);
+
+        setChkHeadlines(tpl.chkHeadlines ?? true);
+        setChkMeta(tpl.chkMeta ?? true);
+        setChkQuotes(tpl.chkQuotes ?? true);
+        setChkHtmlOnly(tpl.chkHtmlOnly ?? false);
     };
 
     const handleSaveTemplate = async () => {
@@ -332,7 +397,29 @@ const Builder: React.FC = () => {
    - **转化组件**：${ctaButtonMd}`;
             }
 
-            // 3. GEO & Multimodal
+            // 3. GEO & Multimodal (Pre-calculation)
+            const strictKnowledge = selectedKnowledgeIds
+                .map(id => knowledgeItems.find(i => i.id === id))
+                .filter(k => k && k.ref_mode === 'strict');
+
+            const smartKnowledge = selectedKnowledgeIds
+                .map(id => knowledgeItems.find(id => id === id)) // Bug here in original logic if copied blindly, let's fix. 
+            // Wait, map(id => knowledgeItems.find(i => i.id === id)).filter... 
+            // Let's rewrite cleaner.
+
+            // Re-implementing logic clearly:
+            const allSelectedKnowledge = knowledgeItems.filter(k => selectedKnowledgeIds.includes(k.id));
+            const strictItems = allSelectedKnowledge.filter(k => k.ref_mode === 'strict');
+            const smartItems = allSelectedKnowledge.filter(k => k.ref_mode !== 'strict'); // Default to smart
+
+            const strictInstruction = strictItems.length > 0 ? `# MANDATORY CONSTRAINTS (Strict Compliance Required)
+    You MUST strictly adhere to the following rules/descriptions without deviation:
+    ${strictItems.map(k => `- **${k.title}**: ${k.content}`).join('\n')}` : "";
+
+            const smartInstruction = smartItems.length > 0 ? `# Knowledge Base (Contextual References)
+    Use the following information as context to enhance your response:
+    ${smartItems.map(k => `- **${k.title}**: ${k.content}`).join('\n')}` : "";
+
             const geoInstruction = (geoQuestion || geoKeywords || enableCodeGeo) ? `# GEO Optimization (AI 引用优化)
    - *用户提问*：>"${geoQuestion || "行业常见问题"}"
    - *策略*：使用 ${geoStructure?.name} 形式回答。
@@ -361,6 +448,14 @@ const Builder: React.FC = () => {
 
             // FINAL PROMPT ASSEMBLY
             // Use optional chaining generously to prevent crashes during state switches
+            // Dynamic Output Requirements
+            let reqIndex = 1;
+            const outputInfos: string[] = [];
+            if (chkHeadlines) outputInfos.push(`${reqIndex++}. **标题**：5个基于 [${selectedHeadlineStrategy?.name}] 的标题。`);
+            if (chkMeta) outputInfos.push(`${reqIndex++}. **摘要**：SEO Meta Description.`);
+            outputInfos.push(`${reqIndex++}. **正文**：逻辑清晰，${selectedStyle?.id === "wechat" ? "短句+Emoji" : "专业严谨"}。`);
+            if (chkQuotes) outputInfos.push(`${reqIndex++}. **金句**：提取或创作3个易于传播的核心观点/金句。`);
+
             const prompt = `# Role
 你是一位 **${selectedRole?.name}** (${selectedRole?.desc})。
 **品牌调性**：${selectedBrand?.name} (${selectedBrand?.desc})。
@@ -375,6 +470,9 @@ const Builder: React.FC = () => {
 4. **篇幅**：${wordCount?.name}
 5. **语言**：${selectedLanguage?.name}
 ${authorName ? `- **作者**：${authorName}` : ""}
+
+${strictInstruction}
+${smartInstruction}
 
 # Journey Stage
 **${selectedJourneyStage?.name}** (${selectedJourneyStage?.desc})
@@ -399,9 +497,7 @@ ${geoInstruction}
 ${selectedTone?.name} (${selectedTone?.desc})
 
 # Output Requirements
-1. **标题**：5个基于 [${selectedHeadlineStrategy?.name}] 的标题。
-2. **摘要**：SEO Meta Description.
-3. **正文**：逻辑清晰，${selectedStyle?.id === "wechat" ? "短句+Emoji" : "专业严谨"}。
+${outputInfos.join('\n')}
 ${outputFormatInstruction}
 
 ${multimodalInstruction}
@@ -421,7 +517,8 @@ ${imageGenInstruction}`;
         showImagePrompts, topImage, middleImage, bottomImage, topImageLink, middleImageLink, bottomImageLink,
         authorName, selectedMultimodal, videoLink, interactiveGoal, selectedImageStyle, selectedImageRatio,
         selectedCTA, ctaLink, selectedPrimaryChannel, selectedDistChannels, outputFormat, layoutStyle, selectedCMS,
-        wordCount, selectedLanguage
+        wordCount, selectedLanguage, selectedKnowledgeIds, knowledgeItems,
+        chkHeadlines, chkMeta, chkQuotes, chkHtmlOnly
     ]);
 
 
@@ -602,6 +699,27 @@ ${imageGenInstruction}`;
                                 </div>
                             </div>
 
+                            {/* Knowledge Base RAG */}
+                            <div className="bg-sky-50/50 p-4 rounded-xl border border-sky-100 space-y-3">
+                                <div className="flex items-center space-x-2 mb-2"><BookOpen className="w-4 h-4 text-sky-500" /><h3 className="text-xs font-bold uppercase text-sky-600">知识库引用 (RAG)</h3></div>
+                                {knowledgeItems.length === 0 ? (
+                                    <div className="text-xs text-sky-400 italic">暂无知识条目，请前往“知识库”添加。</div>
+                                ) : (
+                                    <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                                        {knowledgeItems.map(k => (
+                                            <div
+                                                key={k.id}
+                                                onClick={() => setSelectedKnowledgeIds(prev => prev.includes(k.id) ? prev.filter(x => x !== k.id) : [...prev, k.id])}
+                                                className={`cursor-pointer px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all ${selectedKnowledgeIds.includes(k.id) ? "bg-sky-100 border-sky-300 text-sky-800" : "bg-white border-sky-100 text-slate-600 hover:border-sky-300"}`}
+                                            >
+                                                {k.ref_mode === 'strict' && <span className="mr-1">🔒</span>}
+                                                {k.title}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
                             {/* Competitors */}
                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative z-50">
                                 <div className="flex justify-between items-center mb-3">
@@ -719,6 +837,32 @@ ${imageGenInstruction}`;
                                         <div className="mb-3"><label className="block text-[10px] font-semibold text-orange-600 mb-1 flex items-center"><Box className="w-3 h-3 mr-1" /> CMS 兼容</label><select className="w-full p-2 bg-orange-50 border border-orange-200 rounded-lg text-xs" value={selectedCMS?.id} onChange={e => setSelectedCMS(data.cmsOptions.find(c => c.id === e.target.value) || data.cmsOptions[0])}>{data.cmsOptions.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                                     </>
                                 )}
+
+                                <div className="mt-4 pt-3 border-t border-slate-100">
+                                    <label className="block text-[10px] font-semibold text-slate-400 mb-2">输出内容配置</label>
+                                    <div className="space-y-2">
+                                        <label className="flex items-center space-x-2 cursor-pointer">
+                                            <input type="checkbox" checked={chkHtmlOnly} onChange={e => setChkHtmlOnly(e.target.checked)} className="accent-indigo-600 rounded" />
+                                            <span className="text-xs text-slate-600 font-medium">仅输出 HTML 代码</span>
+                                        </label>
+                                        {!chkHtmlOnly && (
+                                            <div className="pl-6 grid grid-cols-2 gap-2">
+                                                <label className="flex items-center space-x-2 cursor-pointer">
+                                                    <input type="checkbox" checked={chkHeadlines} onChange={e => setChkHeadlines(e.target.checked)} className="accent-blue-500 rounded" />
+                                                    <span className="text-[10px] text-slate-500">标题 (5个)</span>
+                                                </label>
+                                                <label className="flex items-center space-x-2 cursor-pointer">
+                                                    <input type="checkbox" checked={chkMeta} onChange={e => setChkMeta(e.target.checked)} className="accent-blue-500 rounded" />
+                                                    <span className="text-[10px] text-slate-500">摘要 (Meta)</span>
+                                                </label>
+                                                <label className="flex items-center space-x-2 cursor-pointer">
+                                                    <input type="checkbox" checked={chkQuotes} onChange={e => setChkQuotes(e.target.checked)} className="accent-blue-500 rounded" />
+                                                    <span className="text-[10px] text-slate-500">传播金句</span>
+                                                </label>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -727,10 +871,10 @@ ${imageGenInstruction}`;
 
             {/* Right Column: Preview */}
             <div className="w-full md:w-7/12 bg-slate-100 flex flex-col h-full border-l border-slate-200">
-                <div className="p-6 md:p-8 flex-1 overflow-hidden flex flex-col">
-                    <div className="flex justify-between items-center mb-6">
+                <div className="p-6 md:p-8 flex-1 flex flex-col h-full overflow-hidden">
+                    <div className="flex justify-between items-center mb-4 shrink-0">
                         <div>
-                            <h2 className="text-xl font-bold text-slate-800 flex items-center"><FileText className="w-5 h-5 mr-2 text-red-600" />Prompt 预览</h2>
+                            <h2 className="text-xl font-bold text-slate-800 flex items-center"><FileText className="w-5 h-5 mr-2 text-red-600" />Prompt 预览 (可编辑)</h2>
                             <p className="text-xs text-slate-500 mt-1">Ready for GPT-4o / Claude 3.5 Sonnet</p>
                         </div>
 
@@ -743,44 +887,63 @@ ${imageGenInstruction}`;
                                 {isSaving ? <span className="animate-spin mr-2">⟳</span> : (isSaved ? <CircleCheckBig className="w-4 h-4 mr-2" /> : <Save className="w-4 h-4 mr-2" />)}
                                 {isSaved ? "已保存" : "保存记录"}
                             </button>
-                            <button onClick={handleCopy} className={`flex items-center px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-md transform active:scale-95 ${isCopied ? "bg-green-600 text-white" : "bg-gradient-to-r from-red-600 to-red-700 text-white hover:shadow-lg"}`}>
-                                {isCopied ? <CircleCheckBig className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />} {isCopied ? "已复制！" : "一键复制 Prompt"}
+                            <button onClick={() => navigate('/tools', { state: { prompt: generatedPrompt, autoExecute: true } })} className={`flex items-center px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-md transform active:scale-95 bg-gradient-to-r from-red-600 to-red-700 text-white hover:shadow-lg`}>
+                                <Sparkles className="w-4 h-4 mr-2" /> 立即生成内容
                             </button>
                         </div>
                     </div>
-                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative group">
-                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-purple-500 to-blue-500" />
-                        <div className="h-full overflow-auto p-6 scrollbar-thin scrollbar-thumb-slate-200">
-                            <pre className="font-mono text-sm leading-relaxed text-slate-600 whitespace-pre-wrap break-words">{generatedPrompt}</pre>
+
+                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative group min-h-0">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-purple-500 to-blue-500 z-10" />
+
+                        {/* Copy Button */}
+                        <div className="absolute top-4 right-4 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                                onClick={handleCopy}
+                                className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm backdrop-blur-sm border transition-all ${isCopied ? "bg-green-100 text-green-700 border-green-200" : "bg-white/90 text-slate-600 border-slate-200 hover:bg-white hover:text-indigo-600"}`}
+                            >
+                                {isCopied ? <CircleCheckBig className="w-3.5 h-3.5 mr-1.5" /> : <Copy className="w-3.5 h-3.5 mr-1.5" />}
+                                {isCopied ? "已复制" : "一键复制"}
+                            </button>
                         </div>
+
+                        <textarea
+                            className="w-full h-full p-6 pt-8 font-mono text-sm leading-relaxed text-slate-600 resize-none outline-none bg-transparent"
+                            value={generatedPrompt}
+                            onChange={(e) => setGeneratedPrompt(e.target.value)}
+                            spellCheck={false}
+                            placeholder="生成的 Prompt 将显示在这里，您也可以直接编辑..."
+                        />
                     </div>
                 </div>
             </div>
 
             {/* Template Modal */}
-            {isTemplateModalOpen && (
-                <div className="fixed inset-0 bg-black/50 z-[101] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 animate-in zoom-in-95">
-                        <h3 className="text-lg font-bold mb-4">保存为新模版</h3>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1">模版名称</label>
-                                <input
-                                    className="w-full border p-2 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                    placeholder="e.g. B2B LinkedIn 推广"
-                                    value={templateName}
-                                    onChange={e => setTemplateName(e.target.value)}
-                                    autoFocus
-                                />
-                            </div>
-                            <div className="flex justify-end space-x-3 pt-2">
-                                <button onClick={() => setIsTemplateModalOpen(false)} className="px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
-                                <button onClick={handleSaveTemplate} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">保存</button>
+            {
+                isTemplateModalOpen && (
+                    <div className="fixed inset-0 bg-black/50 z-[101] flex items-center justify-center p-4">
+                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 animate-in zoom-in-95">
+                            <h3 className="text-lg font-bold mb-4">保存为新模版</h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">模版名称</label>
+                                    <input
+                                        className="w-full border p-2 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        placeholder="e.g. B2B LinkedIn 推广"
+                                        value={templateName}
+                                        onChange={e => setTemplateName(e.target.value)}
+                                        autoFocus
+                                    />
+                                </div>
+                                <div className="flex justify-end space-x-3 pt-2">
+                                    <button onClick={() => setIsTemplateModalOpen(false)} className="px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
+                                    <button onClick={handleSaveTemplate} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">保存</button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
         </div>
     );
 };
