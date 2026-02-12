@@ -5,7 +5,8 @@ import Builder from './pages/Builder';
 import Admin from './pages/Admin';
 import MaterialLibrary from './pages/MaterialLibrary';
 import History from './pages/History';
-import { PenTool, Settings, FileText, Clock, Database } from 'lucide-react';
+import SmartTools from './pages/SmartTools';
+import { PenTool, Settings, FileText, Clock, Database, Bot } from 'lucide-react';
 
 const Sidebar = () => {
   const location = useLocation();
@@ -37,6 +38,10 @@ const Sidebar = () => {
           <Settings className="w-5 h-5 shrink-0" />
           <span className="hidden md:block ml-3 font-medium">后台管理 (Admin)</span>
         </Link>
+        <Link to="/tools" className={`flex items-center p-3 rounded-lg transition-colors ${isActive('/tools') ? 'bg-indigo-600/10 text-indigo-500' : 'hover:bg-slate-800 hover:text-white'}`}>
+          <Bot className="w-5 h-5 shrink-0" />
+          <span className="hidden md:block ml-3 font-medium">智能工具 (Smart Tools)</span>
+        </Link>
       </nav>
 
       <div className="p-4 border-t border-slate-800 text-xs text-slate-500 text-center md:text-left">
@@ -58,6 +63,7 @@ const App: React.FC = () => {
               <Route path="/admin" element={<Admin />} />
               <Route path="/history" element={<History />} />
               <Route path="/materials" element={<MaterialLibrary />} />
+              <Route path="/tools" element={<SmartTools />} />
             </Routes>
           </div>
         </div>
