@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import { Bold, Italic, List, ListOrdered, Sparkles, Wand2, RefreshCw, type LucideIcon } from 'lucide-react';
+import { Bold, Italic, List, ListOrdered, Sparkles, Wand2, RefreshCw, Minimize2, Languages, type LucideIcon } from 'lucide-react';
 import clsx from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { GeminiService } from '../services/GeminiService';
@@ -24,7 +24,13 @@ const AIEditor: React.FC<AIEditorProps> = ({
 
     const editor = useEditor({
         extensions: [
-            StarterKit,
+            StarterKit.configure({
+                codeBlock: {
+                    HTMLAttributes: {
+                        class: 'bg-gray-100 rounded-md p-3 font-mono text-sm my-2',
+                    },
+                },
+            }),
             Placeholder.configure({
                 placeholder: '在此输入内容，或使用选中文字呼出 AI 助手...',
             }),
@@ -32,7 +38,7 @@ const AIEditor: React.FC<AIEditorProps> = ({
         content: initialContent,
         editorProps: {
             attributes: {
-                class: 'prose prose-slate max-w-none focus:outline-none min-h-[300px] p-4',
+                class: 'prose prose-slate max-w-none focus:outline-none min-h-[300px] p-4 text-[#374151] leading-[1.7] text-[16px]',
             },
         },
         onUpdate: ({ editor }) => {
@@ -42,17 +48,28 @@ const AIEditor: React.FC<AIEditorProps> = ({
 
     // Watch for external content updates
     useEffect(() => {
-        if (editor && initialContent && editor.getHTML() !== initialContent) {
-            // Only update if content is significantly different to avoid cursor jumping
-            // Just a simple check for empty editor or full replacement scenario
-            if (editor.isEmpty && initialContent) {
-                editor.commands.setContent(initialContent);
+        if (editor && initialContent) {
+            const currentContent = editor.getHTML();
+            if (currentContent !== initialContent) {
+                // If editor is focused, we assume user is typing and avoid overwriting
+                // unless the content is significantly different (e.g. restore/generate)
+                // For now, we trust the parent to only send updates when needed,
+                // or we check focus. 
+                // However, for streaming generation, we WANT to update even if focused? 
+                // Actually, let's just check if it's empty OR if the length difference is large (restore).
+                // Or simply: 
+                if (!editor.isFocused || Math.abs(currentContent.length - initialContent.length) > 10) {
+                    // Save cursor position? Tiptap setContent usually resets it.
+                    // For streaming, we might want to insert at end? 
+                    // Let's just setContent for now.
+                    editor.commands.setContent(initialContent);
+                }
             }
         }
     }, [initialContent, editor]);
 
 
-    const handleAIAction = async (action: 'rewrite' | 'expand' | 'polish') => {
+    const handleAIAction = async (action: 'rewrite' | 'expand' | 'polish' | 'shorten' | 'translate') => {
         if (!editor) return;
 
         const { from, to, empty } = editor.state.selection;
@@ -129,6 +146,18 @@ const AIEditor: React.FC<AIEditorProps> = ({
                         onClick={() => handleAIAction('polish')}
                         icon={Sparkles}
                         label="润色"
+                        disabled={isProcessing}
+                    />
+                    <AIButton
+                        onClick={() => handleAIAction('shorten')}
+                        icon={Minimize2}
+                        label="缩写"
+                        disabled={isProcessing}
+                    />
+                    <AIButton
+                        onClick={() => handleAIAction('translate')}
+                        icon={Languages}
+                        label="翻译"
                         disabled={isProcessing}
                     />
                 </BubbleMenu>

@@ -108,6 +108,16 @@ const Builder: React.FC = () => {
     const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeItem[]>([]);
     const [selectedKnowledgeIds, setSelectedKnowledgeIds] = useState<string[]>([]);
 
+    // --- Visual Effects ---
+    const [highlightRole, setHighlightRole] = useState(false);
+
+    useEffect(() => {
+        if (!selectedRole) return;
+        setHighlightRole(true);
+        const timer = setTimeout(() => setHighlightRole(false), 800);
+        return () => clearTimeout(timer);
+    }, [selectedRole]);
+
 
     // --- Effects ---
     // Fetch Templates
@@ -893,7 +903,8 @@ ${imageGenInstruction}`;
                         </div>
                     </div>
 
-                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative group min-h-0">
+
+                    <div className={`flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative group min-h-0 transition-all duration-300 ${highlightRole ? "ring-4 ring-indigo-200 bg-indigo-50/20 shadow-lg scale-[1.01]" : ""}`}>
                         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-purple-500 to-blue-500 z-10" />
 
                         {/* Copy Button */}
@@ -906,6 +917,13 @@ ${imageGenInstruction}`;
                                 {isCopied ? "已复制" : "一键复制"}
                             </button>
                         </div>
+
+                        {/* Visual Highlighting Indicator for Role */}
+                        {highlightRole && (
+                            <div className="absolute top-8 left-1/2 transform -translate-x-1/2 bg-indigo-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg animate-bounce z-30 flex items-center">
+                                <User className="w-3 h-3 mr-1.5" /> 角色设定已更新
+                            </div>
+                        )}
 
                         <textarea
                             className="w-full h-full p-6 pt-8 font-mono text-sm leading-relaxed text-slate-600 resize-none outline-none bg-transparent"

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { BookOpen, Plus, Search, Trash2, Save, X, Edit2, Tag } from 'lucide-react';
+import { BookOpen, Plus, Search, Trash2, Save, X, Edit2, Tag, FileText, Globe } from 'lucide-react';
 import { KnowledgeItem } from '../types';
 
 const KnowledgeBase: React.FC = () => {
@@ -151,13 +151,41 @@ const KnowledgeBase: React.FC = () => {
                                         <button onClick={() => handleDelete(item.id)} className="p-1.5 hover:bg-red-50 rounded text-red-500"><Trash2 className="w-4 h-4" /></button>
                                     </div>
                                 </div>
-                                <div className="flex-1 mb-4 overflow-hidden">
-                                    <div className="flex items-center gap-2 mb-2">
+                                <div className="flex-1 mb-4 overflow-hidden relative">
+                                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                        {/* Ref Mode Badge */}
                                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${item.ref_mode === 'strict' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-green-50 text-green-600 border-green-200'}`}>
                                             {item.ref_mode === 'strict' ? '🔒 严格参考' : '🧠 智能参考'}
                                         </span>
+
+                                        {/* Status Badge */}
+                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-1
+                                                ${item.status === 'indexing' ? 'bg-yellow-50 text-yellow-600 border-yellow-200' :
+                                                item.status === 'failed' ? 'bg-red-50 text-red-600 border-red-200' :
+                                                    'bg-blue-50 text-blue-600 border-blue-200'}`}>
+                                            {item.status === 'indexing' && <span className="animate-spin text-[8px]">↻</span>}
+                                            {item.status === 'indexing' ? '解析中' :
+                                                item.status === 'failed' ? '解析失败' :
+                                                    '已索引'}
+                                        </span>
+
+                                        {/* Slice Count (if > 1) */}
+                                        {(item.slice_count || 1) > 1 && (
+                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-slate-50 text-slate-500 border-slate-200">
+                                                📄 {item.slice_count} 切片
+                                            </span>
+                                        )}
                                     </div>
-                                    <p className="text-sm text-gray-600 line-clamp-4 whitespace-pre-wrap">{item.content}</p>
+
+                                    {/* Source Type Icon */}
+                                    <div className="absolute top-0 right-0 opacity-50">
+                                        {(!item.source_type || item.source_type === 'text') && <FileText className="w-12 h-12 text-slate-100 -mr-2 -mt-2" />}
+                                        {item.source_type === 'pdf' && <FileText className="w-12 h-12 text-red-100 -mr-2 -mt-2" />}
+                                        {item.source_type === 'word' && <FileText className="w-12 h-12 text-blue-100 -mr-2 -mt-2" />}
+                                        {item.source_type === 'url' && <Globe className="w-12 h-12 text-cyan-100 -mr-2 -mt-2" />}
+                                    </div>
+
+                                    <p className="text-sm text-gray-600 line-clamp-4 whitespace-pre-wrap relative z-10">{item.content}</p>
                                 </div>
                                 <div className="flex items-center flex-wrap gap-2 pt-3 border-t border-gray-100">
                                     {Array.isArray(item.tags) && item.tags.map((tag, i) => (

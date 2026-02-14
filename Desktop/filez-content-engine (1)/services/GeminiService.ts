@@ -8,7 +8,7 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 // Define the model
 const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash"
+    model: "gemini-3-pro-preview"
 });
 
 export const GeminiService = {
@@ -38,12 +38,12 @@ export const GeminiService = {
     },
 
     /**
-     * Modifies the selected text based on an instruction (Rewrite, Expand, Polish).
+     * Modifies the selected text based on an instruction (Rewrite, Expand, Polish, Shorten, Translate).
      * @param selection The text selected by the user.
      * @param instruction The type of modification required.
      * @returns The modified text.
      */
-    async modifyText(selection: string, instruction: 'rewrite' | 'expand' | 'polish'): Promise<string> {
+    async modifyText(selection: string, instruction: 'rewrite' | 'expand' | 'polish' | 'shorten' | 'translate'): Promise<string> {
         let prompt = '';
 
         switch (instruction) {
@@ -55,6 +55,12 @@ export const GeminiService = {
                 break;
             case 'polish':
                 prompt = `Please polish the following text to make it sound more professional and engaging:\n\n"${selection}"`;
+                break;
+            case 'shorten':
+                prompt = `Please shorten the following text while retaining the key information:\n\n"${selection}"`;
+                break;
+            case 'translate':
+                prompt = `Please translate the following text into English (if it is not already) or Chinese (if it is English), maintaining the professional tone:\n\n"${selection}"`;
                 break;
         }
 
