@@ -141,7 +141,28 @@ export interface KnowledgeItem {
   content: string;
   tags: string[];
   ref_mode: 'smart' | 'strict';
+  status?: 'indexing' | 'indexed' | 'failed';
+  source_type?: 'pdf' | 'word' | 'url' | 'text';
+  slice_count?: number;
   created_at: string;
+}
+
+export interface HistoryItem {
+  id: string;
+  prompt: string;
+  markdown_content: string;
+  html_content: string;
+  created_at: string;
+  title?: string;
+  tags?: string[];
+}
+
+export interface EditorDocument {
+  id: string;
+  title: string;
+  markdown: string;
+  html: string;
+  createdAt: number;
 }
 
 export type CategoryKey = keyof PromptConfig;
