@@ -1,0 +1,5 @@
+{
+  "name": "BrandPulse GEO",
+  "description": "一个生成式引擎优化 (GEO) 仪表板，用于监控和优化品牌在 Gemini、GPT 和 Claude 等 AI 模型中的可见性。",
+  "requestFramePermissions": []
+}

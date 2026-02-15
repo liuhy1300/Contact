@@ -6,7 +6,8 @@ import {
     PenTool, PanelsTopLeft, User, Map, Sparkles, X, Plus,
     Globe, Fingerprint, Image as ImageIcon, Link, MousePointerClick,
     Zap, Share2, Box, FileText, Copy, CircleCheckBig, CircleAlert,
-    Smartphone, Monitor, Mail, Save, LayoutTemplate, FolderOpen, Trash2, BookOpen
+    Smartphone, Monitor, Mail, Save, LayoutTemplate, FolderOpen, Trash2, BookOpen,
+    ChevronDown, ChevronRight, Eye, Code2, ArrowRight, Target, Palette
 } from 'lucide-react';
 import { Industry, Product, Audience, BaseOption, Channel, LayoutStyle, Competitor, TemplateData, PromptTemplate, KnowledgeItem } from '../types';
 
@@ -27,6 +28,10 @@ const Builder: React.FC = () => {
     const [generatedPrompt, setGeneratedPrompt] = useState("");
     const [isSaving, setIsSaving] = useState(false);
     const [isSaved, setIsSaved] = useState(false);
+
+    // UI 体系升级：策略白板双模式 + 手风琴折叠
+    const [previewMode, setPreviewMode] = useState<"strategy" | "source">("strategy");
+    const [expandedSection, setExpandedSection] = useState<string>("role");
 
     // Template Management State
     const [templates, setTemplates] = useState<PromptTemplate[]>([]);
@@ -592,6 +597,59 @@ ${imageGenInstruction}`;
         );
     };
 
+    // 手风琴折叠区块组件
+    const AccordionSection = ({ id, icon: Icon, title, color, children }: { id: string, icon: any, title: string, color: string, children: React.ReactNode }) => {
+        const isOpen = expandedSection === id;
+        const hasContent = id === "role" ? true : // 角色始终显示配置
+            id === "journey" ? true :
+                id === "value" ? !!(customPainPoint || customCoreValue || customMarketValue) :
+                    id === "knowledge" ? selectedKnowledgeIds.length > 0 :
+                        id === "competitor" ? selectedCompetitorIds.length > 0 :
+                            id === "geo" ? !!(geoQuestion || geoKeywords || enableCodeGeo) : false;
+        return (
+            <div className={`rounded-xl border transition-all duration-200 ${isOpen ? `border-${color}-200 shadow-sm` : 'border-slate-200 hover:border-slate-300'}`}>
+                <button
+                    onClick={() => setExpandedSection(isOpen ? "" : id)}
+                    className={`w-full flex items-center justify-between p-3.5 text-left transition-colors rounded-xl ${isOpen ? `bg-${color}-50/50` : 'bg-white hover:bg-slate-50'}`}
+                >
+                    <div className="flex items-center space-x-2.5">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isOpen ? `bg-${color}-100 text-${color}-600` : 'bg-slate-100 text-slate-400'}`}>
+                            <Icon className="w-3.5 h-3.5" />
+                        </div>
+                        <span className={`text-xs font-bold uppercase tracking-wide ${isOpen ? `text-${color}-700` : 'text-slate-500'}`}>{title}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        {!isOpen && hasContent && <div className={`w-2 h-2 rounded-full bg-${color}-400`} />}
+                        {isOpen ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-300" />}
+                    </div>
+                </button>
+                {isOpen && (
+                    <div className="px-4 pb-4 pt-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                        {children}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // 痛点标签切换逻辑
+    const togglePainTag = (tag: string) => {
+        const current = customPainPoint.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+        if (current.includes(tag)) {
+            setCustomPainPoint(current.filter(t => t !== tag).join("，"));
+        } else {
+            setCustomPainPoint([...current, tag].join("，"));
+        }
+    };
+
+    // 渠道模拟样式映射
+    const channelSimStyles: Record<string, { bg: string, accent: string, label: string, icon: string }> = {
+        wechat: { bg: 'bg-[#f7f7f7]', accent: 'border-green-500', label: '微信公众号', icon: '📱' },
+        website: { bg: 'bg-white', accent: 'border-blue-500', label: '官网 / 博客', icon: '🌐' },
+        edm: { bg: 'bg-slate-50', accent: 'border-orange-500', label: 'EDM 邮件', icon: '📧' },
+        report: { bg: 'bg-white', accent: 'border-slate-500', label: '专业报告', icon: '📄' },
+    };
+
     return (
         <div className="h-full flex flex-col md:flex-row font-sans text-slate-800 overflow-hidden">
             {/* Left Column: Controls */}
@@ -648,72 +706,97 @@ ${imageGenInstruction}`;
 
                 <div className="flex-1 overflow-y-auto p-5 scrollbar-thin scrollbar-thumb-slate-300">
                     {activeTab === "strategy" && (
-                        <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
-                            {/* Role & Context */}
-                            <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200 space-y-4">
-                                <div className="flex items-center space-x-2 mb-2"><User className="w-4 h-4 text-slate-400" /><h3 className="text-xs font-bold uppercase text-slate-500">角色与语境</h3></div>
-                                <div>
-                                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">内容角色</label>
-                                    <select className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-sm font-medium" value={selectedRole?.id} onChange={e => setSelectedRole(data.roles.find(r => r.id === e.target.value) || data.roles[0])}>
-                                        {data.roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                        <div className="space-y-3 animate-in fade-in slide-in-from-left-4 duration-300">
+                            {/* 角色与语境 - 手风琴 */}
+                            <AccordionSection id="role" icon={User} title="角色与语境" color="slate">
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-[10px] font-semibold text-slate-500 mb-1">内容角色</label>
+                                        <select className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-sm font-medium" value={selectedRole?.id} onChange={e => setSelectedRole(data.roles.find(r => r.id === e.target.value) || data.roles[0])}>
+                                            {data.roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                                        </select>
+                                        <p className="text-[10px] text-slate-400 mt-1 pl-1 bg-slate-50 p-1.5 rounded">{selectedRole?.desc}</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-[10px] font-semibold text-slate-500 mb-1">语言</label>
+                                            <select className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm" value={selectedLanguage?.id} onChange={e => setSelectedLanguage(data.languages.find(l => l.id === e.target.value) || data.languages[0])}>
+                                                {data.languages.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-semibold text-slate-500 mb-1">产品</label>
+                                            <select className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm text-red-700 font-medium" value={selectedProduct?.id} onChange={e => setSelectedProduct(data.products.find(p => p.id === e.target.value) as Product || data.products[0])}>
+                                                {data.products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-[10px] font-semibold text-slate-500 mb-1">行业</label>
+                                            <select className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm" value={selectedIndustry?.id} onChange={e => setSelectedIndustry(data.industries.find(i => i.id === e.target.value) as Industry || data.industries[0])}>
+                                                {data.industries.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-semibold text-slate-500 mb-1">受众</label>
+                                            <select className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm" value={selectedAudience?.id} onChange={e => setSelectedAudience(data.audiences.find(a => a.id === e.target.value) as Audience || data.audiences[0])}>
+                                                {data.audiences.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <input type="text" className="w-full p-2 text-xs bg-white border border-slate-200 rounded-lg placeholder-slate-400 focus:ring-2 focus:ring-slate-200 outline-none" placeholder="自定义受众 (可选)..." value={customAudience} onChange={e => setCustomAudience(e.target.value)} />
+                                </div>
+                            </AccordionSection>
+
+                            {/* 用户旅程阶段 - 手风琴 */}
+                            <AccordionSection id="journey" icon={Map} title="用户旅程阶段" color="indigo">
+                                <div className="space-y-2">
+                                    <select className="w-full p-2.5 bg-white border border-indigo-200 rounded-lg text-sm text-indigo-900" value={selectedJourneyStage?.id} onChange={e => setSelectedJourneyStage(data.journeyStages.find(j => j.id === e.target.value) || data.journeyStages[0])}>
+                                        {data.journeyStages.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
                                     </select>
-                                    <p className="text-[10px] text-slate-400 mt-1 pl-1 bg-slate-100 p-1.5 rounded">{selectedRole?.desc}</p>
+                                    <p className="text-[10px] text-indigo-500 pl-1">{selectedJourneyStage?.desc}</p>
                                 </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-[10px] font-semibold text-slate-500 mb-1">语言</label>
-                                        <select className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm" value={selectedLanguage?.id} onChange={e => setSelectedLanguage(data.languages.find(l => l.id === e.target.value) || data.languages[0])}>
-                                            {data.languages.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-semibold text-slate-500 mb-1">产品</label>
-                                        <select className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm text-red-700 font-medium" value={selectedProduct?.id} onChange={e => setSelectedProduct(data.products.find(p => p.id === e.target.value) as Product || data.products[0])}>
-                                            {data.products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                        </select>
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-[10px] font-semibold text-slate-500 mb-1">行业</label>
-                                        <select className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm" value={selectedIndustry?.id} onChange={e => setSelectedIndustry(data.industries.find(i => i.id === e.target.value) as Industry || data.industries[0])}>
-                                            {data.industries.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-semibold text-slate-500 mb-1">受众</label>
-                                        <select className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm" value={selectedAudience?.id} onChange={e => setSelectedAudience(data.audiences.find(a => a.id === e.target.value) as Audience || data.audiences[0])}>
-                                            {data.audiences.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                        </select>
-                                    </div>
-                                </div>
-                                <input type="text" className="w-full p-2 text-xs bg-white border border-slate-200 rounded-lg placeholder-slate-400 focus:ring-2 focus:ring-slate-200 outline-none" placeholder="自定义受众 (可选)..." value={customAudience} onChange={e => setCustomAudience(e.target.value)} />
-                            </div>
+                            </AccordionSection>
 
-                            {/* Journey Stage */}
-                            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 p-4 rounded-xl border border-indigo-100">
-                                <div className="flex items-center space-x-2 mb-2"><Map className="w-4 h-4 text-indigo-500" /><h3 className="text-xs font-bold uppercase text-indigo-600">用户旅程阶段</h3></div>
-                                <select className="w-full p-2.5 bg-white border border-indigo-200 rounded-lg text-sm text-indigo-900" value={selectedJourneyStage?.id} onChange={e => setSelectedJourneyStage(data.journeyStages.find(j => j.id === e.target.value) || data.journeyStages[0])}>
-                                    {data.journeyStages.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
-                                </select>
-                                <p className="text-[10px] text-indigo-500 mt-1 pl-1">{selectedJourneyStage?.desc}</p>
-                            </div>
-
-                            {/* Value Prop */}
-                            <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-100/80 space-y-3">
-                                <div className="flex items-center space-x-2 mb-1"><Sparkles className="w-4 h-4 text-amber-500" /><h3 className="text-xs font-bold uppercase text-amber-600">价值主张</h3></div>
-                                <div><label className="block text-[10px] font-semibold text-amber-700/70 mb-1">痛点</label><textarea className="w-full p-2.5 text-xs border border-amber-200 rounded-lg bg-white h-16" value={customPainPoint} onChange={e => setCustomPainPoint(e.target.value)} /></div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div><label className="block text-[10px] font-semibold text-amber-700/70 mb-1">产品价值</label><input className="w-full p-2.5 text-xs border border-amber-200 rounded-lg bg-white" placeholder="e.g. 极速传输" value={customCoreValue} onChange={e => setCustomCoreValue(e.target.value)} /></div>
-                                    <div><label className="block text-[10px] font-semibold text-amber-700/70 mb-1">商业价值</label><input className="w-full p-2.5 text-xs border border-amber-200 rounded-lg bg-white" placeholder="e.g. ROI +300%" value={customMarketValue} onChange={e => setCustomMarketValue(e.target.value)} /></div>
+                            {/* 价值主张 + 标签云 - 手风琴 */}
+                            <AccordionSection id="value" icon={Sparkles} title="价值主张" color="amber">
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-[10px] font-semibold text-amber-700/70 mb-1.5">痛点</label>
+                                        <textarea className="w-full p-2.5 text-xs border border-amber-200 rounded-lg bg-white h-14 resize-none" value={customPainPoint} onChange={e => setCustomPainPoint(e.target.value)} placeholder="点击下方标签快速添加，或手动输入..." />
+                                        {/* 智能标签云 */}
+                                        {selectedIndustry?.suggestedPainPoints && selectedIndustry.suggestedPainPoints.length > 0 && (
+                                            <div className="flex flex-wrap gap-1.5 mt-2">
+                                                {selectedIndustry.suggestedPainPoints.map(tag => {
+                                                    const isActive = customPainPoint.includes(tag);
+                                                    return (
+                                                        <button
+                                                            key={tag}
+                                                            onClick={() => togglePainTag(tag)}
+                                                            className={`px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all duration-150 ${isActive
+                                                                ? 'bg-amber-100 border-amber-400 text-amber-800 shadow-sm scale-105'
+                                                                : 'bg-white border-amber-200 text-amber-600 hover:border-amber-400 hover:bg-amber-50'
+                                                                }`}
+                                                        >
+                                                            💊 {tag}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div><label className="block text-[10px] font-semibold text-amber-700/70 mb-1">产品价值</label><input className="w-full p-2.5 text-xs border border-amber-200 rounded-lg bg-white" placeholder="e.g. 极速传输" value={customCoreValue} onChange={e => setCustomCoreValue(e.target.value)} /></div>
+                                        <div><label className="block text-[10px] font-semibold text-amber-700/70 mb-1">商业价值</label><input className="w-full p-2.5 text-xs border border-amber-200 rounded-lg bg-white" placeholder="e.g. ROI +300%" value={customMarketValue} onChange={e => setCustomMarketValue(e.target.value)} /></div>
+                                    </div>
                                 </div>
-                            </div>
+                            </AccordionSection>
 
-                            {/* Knowledge Base RAG */}
-                            <div className="bg-sky-50/50 p-4 rounded-xl border border-sky-100 space-y-3">
-                                <div className="flex items-center space-x-2 mb-2"><BookOpen className="w-4 h-4 text-sky-500" /><h3 className="text-xs font-bold uppercase text-sky-600">知识库引用 (RAG)</h3></div>
+                            {/* 知识库引用 - 手风琴 */}
+                            <AccordionSection id="knowledge" icon={BookOpen} title="知识库引用 (RAG)" color="sky">
                                 {knowledgeItems.length === 0 ? (
-                                    <div className="text-xs text-sky-400 italic">暂无知识条目，请前往“知识库”添加。</div>
+                                    <div className="text-xs text-sky-400 italic">暂无知识条目，请前往"知识库"添加。</div>
                                 ) : (
                                     <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
                                         {knowledgeItems.map(k => (
@@ -728,25 +811,22 @@ ${imageGenInstruction}`;
                                         ))}
                                     </div>
                                 )}
-                            </div>
+                            </AccordionSection>
 
-                            {/* Competitors */}
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative z-50">
-                                <div className="flex justify-between items-center mb-3">
-                                    <h3 className="text-xs font-bold uppercase text-slate-500">竞争对标</h3>
+                            {/* 竞争对标 - 手风琴 */}
+                            <AccordionSection id="competitor" icon={Target} title="竞争对标" color="red">
+                                <div className="space-y-3">
                                     <div className="flex items-center space-x-3">
                                         <label className="flex items-center cursor-pointer group"><input type="checkbox" className="mr-1.5 accent-red-600" checked={showCompetitorName} onChange={e => setShowCompetitorName(e.target.checked)} /><span className="text-[10px] text-slate-500">直接点名</span></label>
                                         <label className="flex items-center cursor-pointer group"><input type="checkbox" className="mr-1.5 accent-red-600" checked={expandCompetitorDetails} onChange={e => setExpandCompetitorDetails(e.target.checked)} /><span className="text-[10px] text-slate-500">详细对比</span></label>
                                     </div>
-                                </div>
-                                <div className="flex flex-wrap gap-2 mb-3 min-h-[30px]">
-                                    {selectedCompetitorIds.map(id => {
-                                        const c = data.competitors.find(comp => comp.id === id);
-                                        return c ? <span key={id} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-100">{c.name}<X className="w-3 h-3 ml-1.5 cursor-pointer" onClick={(e) => { e.stopPropagation(); toggleCompetitor(id); }} /></span> : null;
-                                    })}
-                                    {manualCompetitor && <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100">{manualCompetitor}<X className="w-3 h-3 ml-1.5 cursor-pointer" onClick={() => setManualCompetitor("")} /></span>}
-                                </div>
-                                <div className="space-y-2">
+                                    <div className="flex flex-wrap gap-2 min-h-[24px]">
+                                        {selectedCompetitorIds.map(id => {
+                                            const c = data.competitors.find(comp => comp.id === id);
+                                            return c ? <span key={id} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-100">{c.name}<X className="w-3 h-3 ml-1.5 cursor-pointer" onClick={(e) => { e.stopPropagation(); toggleCompetitor(id); }} /></span> : null;
+                                        })}
+                                        {manualCompetitor && <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100">{manualCompetitor}<X className="w-3 h-3 ml-1.5 cursor-pointer" onClick={() => setManualCompetitor("")} /></span>}
+                                    </div>
                                     <div className="relative" ref={competitorDropdownRef}>
                                         <button onClick={() => setIsCompetitorDropdownOpen(!isCompetitorDropdownOpen)} className="w-full flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 hover:bg-white"><span className="flex items-center"><Plus className="w-3 h-3 mr-1" /> 选择竞品...</span></button>
                                         {isCompetitorDropdownOpen && (
@@ -759,17 +839,19 @@ ${imageGenInstruction}`;
                                     </div>
                                     <input type="text" className="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 outline-none" placeholder="手动输入竞品..." value={manualCompetitor} onChange={e => setManualCompetitor(e.target.value)} />
                                 </div>
-                            </div>
+                            </AccordionSection>
 
-                            {/* GEO */}
-                            <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 space-y-3">
-                                <div className="flex items-center justify-between mb-1"><div className="flex items-center space-x-2"><Globe className="w-4 h-4 text-blue-500" /><h3 className="text-xs font-bold uppercase text-blue-600">GEO 优化</h3></div><label className="flex items-center cursor-pointer"><input type="checkbox" className="mr-1.5 accent-blue-600" checked={enableCodeGeo} onChange={e => setEnableCodeGeo(e.target.checked)} /><span className="text-[10px] text-blue-600 font-medium">Schema.org</span></label></div>
-                                <div><label className="block text-[10px] font-semibold text-blue-700/70 mb-1">核心问题</label><input className="w-full p-2.5 text-xs border border-blue-200 rounded-lg bg-white" placeholder="e.g. 行业常见问题?" value={geoQuestion} onChange={e => setGeoQuestion(e.target.value)} /></div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div><label className="block text-[10px] font-semibold text-blue-700/70 mb-1">关键词</label><input className="w-full p-2.5 text-xs border border-blue-200 rounded-lg bg-white" value={geoKeywords} onChange={e => setGeoKeywords(e.target.value)} /></div>
-                                    <div><label className="block text-[10px] font-semibold text-blue-700/70 mb-1">结构</label><select className="w-full p-2.5 text-xs border border-blue-200 rounded-lg bg-white" value={geoStructure?.id} onChange={e => setGeoStructure(data.geoStructures.find(s => s.id === e.target.value) || data.geoStructures[0])}>{data.geoStructures.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+                            {/* GEO 优化 - 手风琴 */}
+                            <AccordionSection id="geo" icon={Globe} title="GEO 优化" color="blue">
+                                <div className="space-y-3">
+                                    <div className="flex justify-end"><label className="flex items-center cursor-pointer"><input type="checkbox" className="mr-1.5 accent-blue-600" checked={enableCodeGeo} onChange={e => setEnableCodeGeo(e.target.checked)} /><span className="text-[10px] text-blue-600 font-medium">Schema.org</span></label></div>
+                                    <div><label className="block text-[10px] font-semibold text-blue-700/70 mb-1">核心问题</label><input className="w-full p-2.5 text-xs border border-blue-200 rounded-lg bg-white" placeholder="e.g. 行业常见问题?" value={geoQuestion} onChange={e => setGeoQuestion(e.target.value)} /></div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div><label className="block text-[10px] font-semibold text-blue-700/70 mb-1">关键词</label><input className="w-full p-2.5 text-xs border border-blue-200 rounded-lg bg-white" value={geoKeywords} onChange={e => setGeoKeywords(e.target.value)} /></div>
+                                        <div><label className="block text-[10px] font-semibold text-blue-700/70 mb-1">结构</label><select className="w-full p-2.5 text-xs border border-blue-200 rounded-lg bg-white" value={geoStructure?.id} onChange={e => setGeoStructure(data.geoStructures.find(s => s.id === e.target.value) || data.geoStructures[0])}>{data.geoStructures.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+                                    </div>
                                 </div>
-                            </div>
+                            </AccordionSection>
                         </div>
                     )}
 
@@ -879,16 +961,27 @@ ${imageGenInstruction}`;
                 </div>
             </div>
 
-            {/* Right Column: Preview */}
+            {/* Right Column: 策略白板 / 源码视图 */}
             <div className="w-full md:w-7/12 bg-slate-100 flex flex-col h-full border-l border-slate-200">
                 <div className="p-6 md:p-8 flex-1 flex flex-col h-full overflow-hidden">
                     <div className="flex justify-between items-center mb-4 shrink-0">
                         <div>
-                            <h2 className="text-xl font-bold text-slate-800 flex items-center"><FileText className="w-5 h-5 mr-2 text-red-600" />Prompt 预览 (可编辑)</h2>
+                            <h2 className="text-xl font-bold text-slate-800 flex items-center">
+                                {previewMode === "strategy" ? <><Eye className="w-5 h-5 mr-2 text-indigo-600" />策略白板</> : <><Code2 className="w-5 h-5 mr-2 text-red-600" />Prompt 预览 (可编辑)</>}
+                            </h2>
                             <p className="text-xs text-slate-500 mt-1">Ready for GPT-4o / Claude 3.5 Sonnet</p>
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 items-center">
+                            {/* 模式切换按钮组 */}
+                            <div className="flex bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                <button onClick={() => setPreviewMode("strategy")} className={`flex items-center px-3 py-2 text-xs font-bold transition-all ${previewMode === "strategy" ? "bg-indigo-600 text-white" : "text-slate-500 hover:bg-slate-50"}`}>
+                                    <Eye className="w-3.5 h-3.5 mr-1" /> 策略视图
+                                </button>
+                                <button onClick={() => setPreviewMode("source")} className={`flex items-center px-3 py-2 text-xs font-bold transition-all ${previewMode === "source" ? "bg-slate-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}>
+                                    <Code2 className="w-3.5 h-3.5 mr-1" /> 源码
+                                </button>
+                            </div>
                             <button
                                 onClick={handleSaveToHistory}
                                 disabled={isSaving || isSaved || !generatedPrompt}
@@ -903,36 +996,135 @@ ${imageGenInstruction}`;
                         </div>
                     </div>
 
-
-                    <div className={`flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative group min-h-0 transition-all duration-300 ${highlightRole ? "ring-4 ring-indigo-200 bg-indigo-50/20 shadow-lg scale-[1.01]" : ""}`}>
-                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-purple-500 to-blue-500 z-10" />
-
-                        {/* Copy Button */}
-                        <div className="absolute top-4 right-4 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                                onClick={handleCopy}
-                                className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm backdrop-blur-sm border transition-all ${isCopied ? "bg-green-100 text-green-700 border-green-200" : "bg-white/90 text-slate-600 border-slate-200 hover:bg-white hover:text-indigo-600"}`}
-                            >
-                                {isCopied ? <CircleCheckBig className="w-3.5 h-3.5 mr-1.5" /> : <Copy className="w-3.5 h-3.5 mr-1.5" />}
-                                {isCopied ? "已复制" : "一键复制"}
-                            </button>
-                        </div>
-
-                        {/* Visual Highlighting Indicator for Role */}
-                        {highlightRole && (
-                            <div className="absolute top-8 left-1/2 transform -translate-x-1/2 bg-indigo-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg animate-bounce z-30 flex items-center">
-                                <User className="w-3 h-3 mr-1.5" /> 角色设定已更新
+                    {/* 策略视图 */}
+                    {previewMode === "strategy" && (
+                        <div className={`flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-y-auto relative transition-all duration-300 ${highlightRole ? "ring-4 ring-indigo-200 shadow-lg" : ""}`}>
+                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 z-10" />
+                            {/* 复制按钮 */}
+                            <div className="absolute top-4 right-4 z-20">
+                                <button onClick={handleCopy} className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm border transition-all ${isCopied ? "bg-green-100 text-green-700 border-green-200" : "bg-white/90 text-slate-600 border-slate-200 hover:bg-white hover:text-indigo-600"}`}>
+                                    {isCopied ? <CircleCheckBig className="w-3.5 h-3.5 mr-1.5" /> : <Copy className="w-3.5 h-3.5 mr-1.5" />}
+                                    {isCopied ? "已复制" : "一键复制"}
+                                </button>
                             </div>
-                        )}
 
-                        <textarea
-                            className="w-full h-full p-6 pt-8 font-mono text-sm leading-relaxed text-slate-600 resize-none outline-none bg-transparent"
-                            value={generatedPrompt}
-                            onChange={(e) => setGeneratedPrompt(e.target.value)}
-                            spellCheck={false}
-                            placeholder="生成的 Prompt 将显示在这里，您也可以直接编辑..."
-                        />
-                    </div>
+                            <div className="p-6 pt-8 space-y-4">
+                                {/* 🎭 人设卡片 */}
+                                <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-xl p-5 text-white">
+                                    <div className="flex items-center space-x-3 mb-3">
+                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-lg">🎭</div>
+                                        <div>
+                                            <div className="text-sm font-bold">{selectedRole?.name || '—'}</div>
+                                            <div className="text-xs text-slate-300">{selectedRole?.desc}</div>
+                                        </div>
+                                    </div>
+                                    {selectedBrand && <div className="flex items-center space-x-2"><Palette className="w-3.5 h-3.5 text-slate-400" /><span className="text-xs text-slate-300">调性：{selectedBrand.name} — {selectedBrand.desc}</span></div>}
+                                </div>
+
+                                {/* 🎯 任务摘要 */}
+                                <div className="bg-slate-50 rounded-xl p-4">
+                                    <div className="flex items-center space-x-2 mb-3"><Zap className="w-4 h-4 text-amber-500" /><span className="text-xs font-bold uppercase text-slate-500">任务摘要</span></div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {selectedStyle && <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium bg-purple-100 text-purple-700 border border-purple-200">✍️ {selectedStyle.name}</span>}
+                                        {selectedPrimaryChannel && <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium bg-green-100 text-green-700 border border-green-200">📤 {selectedPrimaryChannel.name}</span>}
+                                        {wordCount && <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700 border border-blue-200">📐 {wordCount.name}</span>}
+                                        {selectedProduct && <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium bg-red-100 text-red-700 border border-red-200">📦 {selectedProduct.name}</span>}
+                                        {selectedIndustry && <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700 border border-orange-200">🏭 {selectedIndustry.name}</span>}
+                                        {selectedAudience && <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium bg-sky-100 text-sky-700 border border-sky-200">👤 {selectedAudience.name}</span>}
+                                    </div>
+                                </div>
+
+                                {/* 📊 PMM 策略流程 */}
+                                {(customPainPoint || customCoreValue || customScenarios || customProof) && (
+                                    <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-100">
+                                        <div className="flex items-center space-x-2 mb-3"><ArrowRight className="w-4 h-4 text-amber-600" /><span className="text-xs font-bold uppercase text-amber-700">PMM 策略流程</span></div>
+                                        <div className="flex items-center flex-wrap gap-2">
+                                            {customPainPoint && <div className="flex items-center"><span className="bg-red-100 text-red-700 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border border-red-200">💢 痛点<br /><span className="font-normal">{customPainPoint.slice(0, 30)}{customPainPoint.length > 30 ? '...' : ''}</span></span><ArrowRight className="w-3 h-3 text-amber-400 mx-1 shrink-0" /></div>}
+                                            {customCoreValue && <div className="flex items-center"><span className="bg-green-100 text-green-700 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border border-green-200">💎 价值<br /><span className="font-normal">{customCoreValue.slice(0, 30)}</span></span><ArrowRight className="w-3 h-3 text-amber-400 mx-1 shrink-0" /></div>}
+                                            {customScenarios && <div className="flex items-center"><span className="bg-blue-100 text-blue-700 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border border-blue-200">🎬 场景<br /><span className="font-normal">{customScenarios.slice(0, 30)}</span></span><ArrowRight className="w-3 h-3 text-amber-400 mx-1 shrink-0" /></div>}
+                                            {customProof && <div className="flex items-center"><span className="bg-purple-100 text-purple-700 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border border-purple-200">🏆 背书<br /><span className="font-normal">{customProof.slice(0, 30)}</span></span></div>}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* 🔄 旅程阶段 */}
+                                <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
+                                    <div className="flex items-center space-x-2 mb-3"><Map className="w-4 h-4 text-indigo-500" /><span className="text-xs font-bold uppercase text-indigo-600">用户旅程</span></div>
+                                    <div className="flex items-center gap-1">
+                                        {data.journeyStages.map((stage, idx) => (
+                                            <div key={stage.id} className="flex items-center">
+                                                <div className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${stage.id === selectedJourneyStage?.id ? 'bg-indigo-600 text-white shadow-md scale-105' : 'bg-white text-indigo-400 border border-indigo-200'}`}>{stage.name}</div>
+                                                {idx < data.journeyStages.length - 1 && <ArrowRight className="w-3 h-3 text-indigo-300 mx-0.5" />}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* 🌐 GEO 优化 (条件渲染) */}
+                                {(geoQuestion || geoKeywords || enableCodeGeo) && (
+                                    <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+                                        <div className="flex items-center space-x-2 mb-2"><Globe className="w-4 h-4 text-blue-500" /><span className="text-xs font-bold uppercase text-blue-600">GEO 优化</span>{enableCodeGeo && <span className="px-1.5 py-0.5 bg-blue-200 text-blue-700 rounded text-[9px] font-mono">Schema.org</span>}</div>
+                                        <div className="grid grid-cols-3 gap-2 text-[10px]">
+                                            {geoQuestion && <div className="bg-white p-2 rounded-lg border border-blue-100"><div className="text-blue-400 font-bold mb-0.5">核心问题</div><div className="text-slate-600">{geoQuestion}</div></div>}
+                                            {geoKeywords && <div className="bg-white p-2 rounded-lg border border-blue-100"><div className="text-blue-400 font-bold mb-0.5">关键词</div><div className="text-slate-600">{geoKeywords}</div></div>}
+                                            {geoStructure && <div className="bg-white p-2 rounded-lg border border-blue-100"><div className="text-blue-400 font-bold mb-0.5">结构</div><div className="text-slate-600">{geoStructure.name}</div></div>}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* 🎨 输出配置摘要 */}
+                                <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                                    <div className="flex items-center space-x-2 mb-3"><FileText className="w-4 h-4 text-slate-400" /><span className="text-xs font-bold uppercase text-slate-500">输出配置</span></div>
+                                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                        <div className="flex justify-between py-1 px-2 bg-white rounded"><span className="text-slate-400">格式</span><span className="text-slate-700 font-medium">{outputFormat === 'html' ? 'HTML' : 'Markdown'}</span></div>
+                                        {layoutStyle && layoutStyle.id !== 'none' && <div className="flex justify-between py-1 px-2 bg-white rounded"><span className="text-slate-400">排版</span><span className="text-slate-700 font-medium">{layoutStyle.name}</span></div>}
+                                        {selectedCTA && <div className="flex justify-between py-1 px-2 bg-white rounded"><span className="text-slate-400">CTA</span><span className="text-slate-700 font-medium">{selectedCTA.name}</span></div>}
+                                        {selectedHeadlineStrategy && <div className="flex justify-between py-1 px-2 bg-white rounded"><span className="text-slate-400">标题策略</span><span className="text-slate-700 font-medium">{selectedHeadlineStrategy.name}</span></div>}
+                                    </div>
+                                </div>
+
+                                {/* 📱 渠道场景化模拟 */}
+                                {selectedPrimaryChannel && channelSimStyles[selectedPrimaryChannel.id] && (
+                                    <div className={`rounded-xl p-4 border-2 ${channelSimStyles[selectedPrimaryChannel.id].accent} ${channelSimStyles[selectedPrimaryChannel.id].bg}`}>
+                                        <div className="flex items-center space-x-2 mb-2">
+                                            <span className="text-lg">{channelSimStyles[selectedPrimaryChannel.id].icon}</span>
+                                            <span className="text-xs font-bold text-slate-700">渠道预览 — {channelSimStyles[selectedPrimaryChannel.id].label}</span>
+                                        </div>
+                                        <div className={`bg-white rounded-lg p-3 border border-slate-200 ${selectedPrimaryChannel.id === 'wechat' ? 'max-w-[320px] mx-auto font-serif text-sm leading-7' : selectedPrimaryChannel.id === 'edm' ? 'max-w-[600px] mx-auto' : ''}`}>
+                                            <div className="text-xs text-slate-500 italic">此区域模拟 {channelSimStyles[selectedPrimaryChannel.id].label} 的排版风格。选择不同渠道可查看对应效果。</div>
+                                            <div className="mt-2 text-sm text-slate-700 font-medium">{selectedProduct?.name} — {selectedIndustry?.name}</div>
+                                            {selectedPrimaryChannel.id === 'wechat' && <div className="mt-2 border-l-4 border-green-500 pl-3 text-xs text-slate-600">{customPainPoint || '（痛点将显示于此）'}</div>}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 源码视图 */}
+                    {previewMode === "source" && (
+                        <div className={`flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative group min-h-0 transition-all duration-300 ${highlightRole ? "ring-4 ring-indigo-200 shadow-lg" : ""}`}>
+                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-purple-500 to-blue-500 z-10" />
+                            <div className="absolute top-4 right-4 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={handleCopy} className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm border transition-all ${isCopied ? "bg-green-100 text-green-700 border-green-200" : "bg-white/90 text-slate-600 border-slate-200 hover:bg-white hover:text-indigo-600"}`}>
+                                    {isCopied ? <CircleCheckBig className="w-3.5 h-3.5 mr-1.5" /> : <Copy className="w-3.5 h-3.5 mr-1.5" />}
+                                    {isCopied ? "已复制" : "一键复制"}
+                                </button>
+                            </div>
+                            {highlightRole && (
+                                <div className="absolute top-8 left-1/2 transform -translate-x-1/2 bg-indigo-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg animate-bounce z-30 flex items-center">
+                                    <User className="w-3 h-3 mr-1.5" /> 角色设定已更新
+                                </div>
+                            )}
+                            <textarea
+                                className="w-full h-full p-6 pt-8 font-mono text-sm leading-relaxed text-slate-600 resize-none outline-none bg-transparent"
+                                value={generatedPrompt}
+                                onChange={(e) => setGeneratedPrompt(e.target.value)}
+                                spellCheck={false}
+                                placeholder="生成的 Prompt 将显示在这里，您也可以直接编辑..."
+                            />
+                        </div>
+                    )}
                 </div>
             </div>
 

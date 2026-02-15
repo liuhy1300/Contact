@@ -7,6 +7,7 @@ export interface BaseOption {
 
 export interface Industry extends BaseOption {
   painPoints: string;
+  suggestedPainPoints?: string[];
 }
 
 export interface Product extends BaseOption {
@@ -135,6 +136,15 @@ export interface PromptTemplate {
 }
 
 
+// 知识切片
+export interface KnowledgeChunk {
+  id: string;
+  text: string;
+  startLine?: number;
+  endLine?: number;
+  tags?: string[];
+}
+
 export interface KnowledgeItem {
   id: string;
   title: string;
@@ -142,8 +152,13 @@ export interface KnowledgeItem {
   tags: string[];
   ref_mode: 'smart' | 'strict';
   status?: 'indexing' | 'indexed' | 'failed';
-  source_type?: 'pdf' | 'word' | 'url' | 'text';
+  source_type?: 'pdf' | 'word' | 'url' | 'text' | 'excel' | 'audio' | 'video' | 'pptx';
+  source_url?: string;
+  sync_frequency?: 'manual' | 'daily' | 'weekly';
+  version?: number;
+  is_archived?: boolean;
   slice_count?: number;
+  chunks?: KnowledgeChunk[];
   created_at: string;
 }
 

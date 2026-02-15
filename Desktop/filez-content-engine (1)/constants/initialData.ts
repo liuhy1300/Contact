@@ -20,13 +20,13 @@ export const INITIAL_DATA: PromptConfig = {
     { id: "partner", name: "共情式顾问", desc: "温暖真诚，关注解决实际焦虑" }
   ],
   industries: [
-    { id: "biopharma", name: "生物制药", painPoints: "FDA 21 CFR Part 11 合规，配方数据防泄露" },
-    { id: "finance", name: "金融/证券", painPoints: "穿透式监管，IPO/M&A 核心底稿保护" },
-    { id: "manufacturing", name: "高端制造/汽车", painPoints: "IP图纸防泄露，跨国大文件传输延迟" },
-    { id: "semiconductor", name: "芯片半导体", painPoints: "EDA 数据/光刻机图纸绝对防御" },
-    { id: "new_energy", name: "新能源", painPoints: "海外建厂合规，野外弱网传输" },
-    { id: "state_digital", name: "央国企数科", painPoints: "信创国产化替代，数据资产入表" },
-    { id: "government", name: "政府/国企", painPoints: "电子政务合规，内外网隔离交换" }
+    { id: "biopharma", name: "生物制药", painPoints: "FDA 21 CFR Part 11 合规，配方数据防泄露", suggestedPainPoints: ["合规风险", "配方泄露", "临床数据管理", "审计追溯", "跨境数据传输", "GxP合规"] },
+    { id: "finance", name: "金融/证券", painPoints: "穿透式监管，IPO/M&A 核心底稿保护", suggestedPainPoints: ["数据孤岛", "监管合规", "底稿保护", "审计追踪", "跨境交易", "敏感信息泄露"] },
+    { id: "manufacturing", name: "高端制造/汽车", painPoints: "IP图纸防泄露，跨国大文件传输延迟", suggestedPainPoints: ["IP泄露", "大文件传输", "供应链协同", "跨国协作", "版本混乱", "成本控制"] },
+    { id: "semiconductor", name: "芯片半导体", painPoints: "EDA 数据/光刻机图纸绝对防御", suggestedPainPoints: ["EDA数据泄露", "供应链安全", "出口管制", "IP保护", "研发协同", "权限管控"] },
+    { id: "new_energy", name: "新能源", painPoints: "海外建厂合规，野外弱网传输", suggestedPainPoints: ["弱网传输", "海外合规", "远程协作", "数据主权", "项目管理", "移动办公"] },
+    { id: "state_digital", name: "央国企数科", painPoints: "信创国产化替代，数据资产入表", suggestedPainPoints: ["信创替代", "数据资产入表", "等保合规", "国产化适配", "统一管控", "安全审计"] },
+    { id: "government", name: "政府/国企", painPoints: "电子政务合规，内外网隔离交换", suggestedPainPoints: ["内外网隔离", "电子政务", "等保三级", "文件交换", "密级管控", "审批流程"] }
   ],
   products: [
     { id: "ai_kb", name: "Filez AI 知识库", features: "企业大脑、RAG架构、精准问答" },
